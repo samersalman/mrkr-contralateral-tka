@@ -1,0 +1,4 @@
+label,strategy,n_with_27447,n_valid_index,n_age40,n_no_prior_contra_arth,n_no_infection
+LOCKED,strict,8525,4222,4203,3756,3752
+LOCKED,recovery_any,8525,7205,7112,6393,6381
+LOCKED,recovery_confirmed,8525,6903,6815,6141,6131

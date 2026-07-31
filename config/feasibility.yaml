@@ -1,0 +1,915 @@
+# =============================================================================
+# feasibility.yaml — master configuration for the MRKR Contralateral TKA
+# Phase-1 metadata-only feasibility pipeline.
+#
+# EVERY protocol parameter lives here so code is data-driven and auditable.
+# Codes and encodings below were VERIFIED against the actual CSVs and the
+# CPT/ICD dictionaries during Stage-1 inspection (see outputs/logs/assumptions.md).
+# Do NOT hard-code any of these values in modules; read them from here.
+# =============================================================================
+
+project:
+  name: "MRKR Contralateral TKA - Phase 1 Feasibility"
+  phase: 1
+  description: >
+    Metadata-only feasibility gate for "Multi-View Radiographic Prediction of
+    Contralateral Knee Arthroplasty After Unilateral TKA". No DICOMs, no models.
+
+# ---- Paths (relative to project root) ---------------------------------------
+paths:
+  metadata_dir: "metadata-files"
+  source_parquet_dir: "derived-data/source-parquet"
+  cohort_dir: "derived-data/cohort"
+  outputs_dir: "outputs"
+  tables_dir: "outputs/tables"
+  figures_dir: "outputs/figures"
+  logs_dir: "outputs/logs"
+  run_log: "outputs/logs/run.log"
+  assumptions_log: "outputs/logs/assumptions.md"
+
+# ---- Source files: filename, grain, patient key, date column ----------------
+# Row counts / distinct-patient counts are the Stage-1 verified values, kept
+# here only as sanity-check references (assert against them, do not trust blindly).
+patient_id_col: "empi_anon"
+date_format: "%Y-%m-%d"          # all *date_anon / StudyDate_anon are YYYY-MM-DD
+
+source_files:
+  demographics:
+    filename: "MRKR_demographics.csv"
+    grain: "one row per patient"
+    date_cols: []
+    ref_rows: 83011
+    ref_patients: 83011
+  cpt:
+    filename: "MRKR_CPT.csv"
+    date_cols: ["date_anon"]
+    age_col: "age_at_procedure"
+    ref_rows: 6216190
+    ref_patients: 83011
+  icd:
+    filename: "MRKR_ICD.csv"
+    date_cols: ["date_anon"]
+    age_col: "age_at_dx"
+    ref_rows: 21956056
+    ref_patients: 83011
+    large: true                  # ~1.79 GB — stream via DuckDB, never full pandas
+  image:
+    filename: "MRKR_image_metadata.csv"
+    date_cols: ["StudyDate_anon"]
+    age_col: "age_at_exam"
+    study_uid_col: "StudyInstanceUID_anon"
+    series_uid_col: "SeriesInstanceUID_anon"
+    instance_uid_col: "SOPInstanceUID_anon"
+    ref_rows: 503261
+    ref_patients: 83011
+    ref_studies: 169004
+  pain:
+    filename: "MRKR_pain.csv"
+    date_cols: ["date_anon"]
+    ref_rows: 4970869
+    ref_patients: 83011
+  cpt_dictionary:
+    filename: "MRKR_CPT_dictionary.csv"
+    ref_rows: 7166
+  icd_dictionary:
+    filename: "MRKR_ICD_dictionary.csv"
+    ref_rows: 25209
+
+# ---- Index procedure --------------------------------------------------------
+index:
+  cpt_code: "27447"              # Arthroplasty, knee, condyle & plateau, medial AND lateral (TKA)
+  age_min: 40                    # aged >= 40 at index TKA
+  age_col: "age_at_procedure"
+
+# ---- Prior knee-arthroplasty CPT codes (verified in CPT dictionary) ---------
+# Used ONLY to detect prior CONTRALATERAL knee arthroplasty before index.
+# All are laterality-relevant knee replacement / revision / removal codes.
+prior_knee_arthroplasty_cpt:
+  "27447": "Total knee arthroplasty (condyle & plateau, medial AND lateral)"
+  "27446": "Unicompartmental / partial knee (condyle & plateau, medial OR lateral)"
+  "27445": "Knee arthroplasty, hinge prosthesis (eg Walldius)"
+  "27442": "Arthroplasty, femoral condyles or tibial plateau(s), knee"
+  "27440": "Arthroplasty, knee, tibial plateau"
+  "27438": "Arthroplasty, patella; with prosthesis"
+  "27486": "Revision total knee arthroplasty, 1 component"
+  "27487": "Revision total knee arthroplasty, femoral and entire tibial component"
+  "27488": "Removal of prosthesis incl total knee prosthesis"
+# Note: 27446 is the unicompartmental (partial-knee) code the protocol flags.
+
+# ---- CPT modifier / laterality parsing --------------------------------------
+# Verified raw modifier distribution for 27447: NULL 8613 (61%), RT 2799, LT 2641,
+# '50' 11, plus parseable multi-modifiers (e.g. 'RT XP', '74 LT'). No RT+LT conflicts seen.
+laterality:
+  modifier_col: "cpt_group_modifier"
+  right_tokens: ["RT"]           # match as whitespace-delimited token, case-insensitive
+  left_tokens: ["LT"]
+  bilateral_tokens: ["50"]       # modifier 50 = bilateral procedure
+  # multi-modifier records (e.g. 'RT XP') are split on whitespace; a single
+  # RT xor LT token -> that side; RT and LT both present -> conflicting.
+  side_values: {right: "R", left: "L", bilateral: "B", unknown: "U"}
+  quality_flags: ["single_rt", "single_lt", "bilateral_50", "multi_single_side",
+                  "conflicting", "missing", "uninterpretable"]
+
+# ---- Image metadata encodings (verified) ------------------------------------
+image:
+  laterality_col: "laterality"          # R / L / B / -1
+  laterality_map: {R: "R", L: "L", B: "B", "-1": "unknown"}
+  bilateral_code: "B"                   # B-frontal contains the contralateral knee (no crop)
+  unknown_codes: ["-1"]
+  view_col: "view_position"             # F / L / S / I / E
+  view_map: {F: "frontal", L: "lateral", S: "sunrise", I: "other", E: "other"}
+  frontal_code: "F"
+  weight_bearing_col: "weight_bearing"  # 0 / 1 (float-coded "0.0"/"1.0")
+  weight_bearing_true: 1
+  arthroplasty_col: "arthroplasty"      # 0 / R / L / B / NL
+  arthroplasty_none: "0"
+  arthroplasty_present_codes: ["R", "L", "B"]   # laterality-coded prosthesis on image
+  arthroplasty_nonlocalized: "NL"
+  klg_cols: ["L_KLG_inference", "R_KLG_inference"]   # secondary comparator only
+  study_date_col: "StudyDate_anon"
+  path_col: "dicom_path"
+  study_desc_col: "StudyDescription"
+  series_desc_col: "SeriesDescription"
+
+# ---- Eligible pre-index contralateral imaging -------------------------------
+imaging_selection:
+  pre_index_window_days: [1, 365]       # 1..365 days BEFORE index (strictly pre-index)
+  # Protocol preference order (highest first). "wb"=weight-bearing frontal present.
+  preference_order:
+    - {name: "wb_frontal_lateral_sunrise", requires: ["wb_frontal", "lateral", "sunrise"]}
+    - {name: "wb_frontal_plus_any",        requires: ["wb_frontal", "any_extra_view"]}
+    - {name: "frontal_only",               requires: ["frontal"]}
+    - {name: "nonwb_frontal",              requires: ["nonwb_frontal"]}
+  same_study_extra_views: true          # additional views preferred from same StudyInstanceUID_anon
+  exclude_unresolved_laterality: true
+  exclude_contralateral_prosthesis: true
+
+# ---- Infection / osteomyelitis exclusion (365 d pre-index) ------------------
+# Two clearly-labeled candidate definitions; report counts under BOTH, pick none silently.
+# Verified lifetime distinct-patient ceilings: knee_osteomyelitis=1389, joint_infection=551,
+# either=1792 (pre-index-windowed counts will be much smaller).
+infection:
+  window_days_before_index: 365
+  definitions:
+    high_specificity:
+      label: "knee_osteomyelitis only (knee-specific curated flag)"
+      curated_flags: ["knee_osteomyelitis"]
+    sensitivity:
+      label: "knee_osteomyelitis OR joint_infection (joint_infection not knee-specific)"
+      curated_flags: ["knee_osteomyelitis", "joint_infection"]
+  # Optional transparent ICD code list corroborating knee-region osteomyelitis (verified
+  # in ICD dictionary). Used for documentation / cross-check, NOT applied silently.
+  knee_region_osteomyelitis_icd10_prefixes: ["M86.05", "M86.06"]  # femur; tibia & fibula
+
+# ---- Curated comorbidity flags (ICD table, verified present) ----------------
+comorbidity_flags:
+  ["autoimmune", "diabetes", "hypertension", "obesity", "nicotine_use",
+   "trauma_lower_extremity", "knee_osteoarthritis"]
+
+# ---- ICD10 knee-OA laterality digits (side-recovery SIGNAL only) ------------
+# Verified: 5th digit 1=right, 2=left, 0/9=unspecified. Characterize concordance;
+# NEVER silently apply. Any use confined to the labeled permissive arm.
+icd_side_recovery:
+  right_codes: ["M17.11", "M17.31"]
+  left_codes:  ["M17.12", "M17.32"]
+  unspecified_codes: ["M17.10", "M17.30", "M17.9", "M17.0", "M17.2"]
+
+# ---- Landmark, horizon, outcome windows -------------------------------------
+timeline:
+  landmark_days: 90                      # primary time origin = day 90 post-index
+  event_start_day: 91                    # events begin day 91
+  horizon_years: 5                       # 5-year horizon from index
+  days_per_year: 365.25
+secondary_event_windows:                 # descriptive counts only
+  from_day1:  [365, 730, 1826]           # 1y, 2y, 5y from day 1  (1826 ~= 5*365.25)
+  from_day91: [365, 730, 1826]           # 1y, 2y, 5y measured from day 91
+
+# ---- Cohort strategies ------------------------------------------------------
+cohort_strategies:
+  strict:
+    label: "Strict (candidate primary): earliest 27447 of ANY kind must itself be single-side RT/LT"
+    require_earliest_27447_single_side: true
+  permissive:
+    label: "Permissive sensitivity: earliest laterality-coded 27447 as index only if no evidence of earlier arthroplasty"
+    require_earliest_27447_single_side: false
+    require_no_prior_arthroplasty_evidence: true
+
+# ---- LOCKED primary definition (author sign-off 2026-07-21; Decision E) ------
+# Chosen empirically via the re-gate grid (src/regate.py, outputs/tables/regate_grid.csv):
+# no coded-laterality-only cohort reaches the 500-event floor (strict max 420 at lifetime),
+# so the primary admits high-concordance side-RECOVERED index laterality plus a 2-year window.
+# Predictor imaging and the coded OUTCOME stay gold-standard; only the INDEX side is recovered.
+primary_definition:
+  cohort_strategy: "recovery_any"        # strict | recovery_any | recovery_confirmed
+  pre_index_window_days: [1, 730]        # 2-year primary pre-index contralateral-imaging window
+  side_recovery:
+    enabled: true
+    # recover the index side for a patient whose EARLIEST 27447 is blank, from concordant
+    # same-day-or-earlier signals with NO conflicting signal. Never post-index/outcome data.
+    signals: ["same_day_image_laterality", "icd_m17_laterality", "studydesc_text"]
+    require_min_concordant_signals: 1    # recovery_any=1 (primary); recovery_confirmed=2 (sensitivity)
+    require_no_conflict: true
+  # QA gate (protocol section 7 / 23): recovered index laterality MUST be validated by a
+  # >=200-patient laterality audit before the cohort is locked for model training. Flagged, not run here.
+  requires_laterality_qa_audit: true
+  sensitivities:
+    cohort_strategies: ["strict", "recovery_confirmed"]
+    windows: [[1, 365], [1, 1095]]
+  # Re-gate regression anchors for the chosen cell (assert against these):
+  verified_regate:
+    n_final_cohort: 3709
+    primary_events_5y: 533
+    test_allocatable_20pct: 107
+    pct_index_recovered: 49.3
+
+# ---- Subgroups (verified demographic value strings) -------------------------
+subgroups:
+  sex_col: "sex"                         # values: "Female", "Male"
+  age_cutoff: 65                         # <65 vs >=65
+  race_col: "race"
+  race_groups:
+    black: "African American or Black"
+    white: "Caucasian or White"
+    asian: "Asian"
+  obesity_flag: "obesity"
+  event_flag_bins: {sparse: 50, moderate: 100}   # <50, 50-99, >=100 events
+
+# ---- Feasibility go/no-go floors (preliminary descriptive benchmark) --------
+floors:
+  primary_events_min: 500
+  test_allocatable_min: 100
+
+# ---- Observation-through-day-90 definition ----------------------------------
+observation:
+  # Primary: last-observed date (max across CPT/ICD/pain/image dates) > landmark.
+  primary_rule: "last_observed_date_gt_landmark"
+  # Stricter documented variant: an actual record in the day-0..90 window.
+  strict_variant: "record_present_in_landmark_window"
+
+reproducibility:
+  random_seed: 20250720
+  python_note: >
+    Validated on the active interpreter (Python 3.14.0) where all required
+    packages are installed. pyenv 3.12.8 lacks the scientific stack; see README.
+
+# =============================================================================
+# PHASE 2 — model development (Tracks A/B/C). Everything above is FROZEN:
+# nothing below may change the locked cohort, labels, or patient splits.
+# Non-negotiables enforced by these settings:
+#   1. contralateral crop fidelity (zero index-knee pixels, zero side markers)
+#   2. every normalization / imputation / calibration fit on TRAIN ONLY
+#   3. one pre-specified architecture, 5 seeds, no architecture tournament
+#   4. the test split stays SEALED until model + thresholds + analysis frozen
+# =============================================================================
+
+# ---- Track A: clinical feature table (src/features_clinical.py) -------------
+features_clinical:
+  out_parquet: "derived-data/cohort/features_clinical.parquet"
+  completeness_csv: "outputs/tables/features_clinical_completeness.csv"
+  completeness_md: "outputs/features_clinical_completeness.md"
+  # Comorbidities: per-patient MAX(flag) over ICD rows STRICTLY BEFORE index_date.
+  comorbidity_flags: ["obesity", "diabetes", "hypertension", "autoimmune",
+                      "nicotine_use", "trauma_lower_extremity"]
+  comorbidity_lookback_days: null        # null = all available pre-index history
+  # Pain (MRKR_pain): rows strictly pre-index within this lookback.
+  # knee_pain is "0"/"1"; pain_score is "0".."10"; laterality is coded on only ~5%
+  # of rows (R/L/B), so side-specific pain is a secondary, largely-missing feature.
+  pain_lookback_days: 365
+  pain_knee_flag_col: "knee_pain"
+  pain_score_col: "pain_score"
+  pain_knee_flag_true: "1"               # verified domain: knee_pain is the STRING "0"/"1"
+  pain_laterality_col: "laterality"
+  pain_bilateral_code: "B"
+  # Carried through for protocol section 21 (weight-bearing subgroup) and section 24
+  # ("weight-bearing frontal radiographs only" sensitivity). Evaluation-only, never a predictor.
+  carry_columns: ["weight_bearing_frontal"]
+  # Contralateral inferred KLG: read L_/R_KLG_inference from the SELECTED frontal
+  # image of the selected study, taking the column that matches contra_side.
+  klg_source_view: "F"
+  # Race is EXCLUDED from the primary predictor set (protocol section 21) but is
+  # retained in the table for subgroup / fairness evaluation.
+  race_in_primary_predictors: false
+  # ---- M0 vs M1 (protocol Table 7) -----------------------------------------
+  # Table 7 defines M0 = "Age, sex, comorbidities, pain, image-to-index interval"
+  # and M1 = "M0 plus inferred KLG". Table 6 lists inferred KLG as a SECONDARY
+  # COMPARATOR ONLY. An earlier revision of this file wrongly placed klg_contra in
+  # the primary set, which put a radiograph-derived severity grade into the very
+  # comparator the image model must beat (and it was the dominant coefficient),
+  # biasing incremental imaging value toward zero. Corrected: KLG now belongs to
+  # m1_predictors only. Recorded as a deviation-register entry.
+  primary_predictors: ["age_at_index", "sex_female", "days_to_index", "knee_pain_any",
+                       "pain_score_max", "obesity", "diabetes", "hypertension",
+                       "autoimmune", "nicotine_use", "trauma_lower_extremity"]
+  # M1 = M0 + inferred contralateral KLG, fit on the KLG-eligible subset only
+  # (protocol Secondary objective 2: "in the subset with eligible bilateral frontal
+  # images"). Never median-impute KLG across the whole cohort for M1.
+  m1_predictors: ["age_at_index", "sex_female", "days_to_index", "knee_pain_any",
+                  "pain_score_max", "obesity", "diabetes", "hypertension",
+                  "autoimmune", "nicotine_use", "trauma_lower_extremity", "klg_contra"]
+  m1_requires_klg_eligible_subset: true
+  # Imputation is FIT ON TRAIN ONLY, then applied unchanged to val/test.
+  imputation:
+    fit_split: "train"
+    numeric_strategy: "median"
+    categorical_strategy: "most_frequent"
+    missing_indicator_cols: ["klg_contra", "pain_score_max"]
+    params_json: "derived-data/cohort/clinical_imputation_params.json"
+
+# ---- Track A: M0 clinical baseline (src/model_clinical.py) ------------------
+model_clinical:
+  report_md: "outputs/clinical_baseline_report.md"
+  metrics_csv: "outputs/tables/m0_metrics.csv"
+  coefficients_csv: "outputs/tables/m0_coefficients.csv"
+  calibration_csv: "outputs/tables/m0_calibration.csv"
+  model_json: "derived-data/cohort/m0_clinical_model.json"
+  penalizer_grid: [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0]
+  l1_ratio: 0.0                          # ridge; elastic-net not needed at 11 predictors
+  age_rcs_df: 3                          # restricted cubic spline on age (patsy cr())
+  horizons_years: [1, 2, 5]              # 2 y is the co-primary horizon
+  tuning_split: "val"
+  # The VALIDATION penalizer grid is still computed and reported in full (that is what
+  # tuning_split names); it is simply no longer the selector. Selection moved to the
+  # cross-validated C-index on 2026-07-26 — deviation D24, resolving the author decision
+  # flagged as D23 — because the validation C-index (54 events) is monotone across the whole
+  # pre-specified grid and never turns over, while the 5x5-fold repeated stratified CV inside
+  # the TRAIN split estimates the same quantity from 373 events and is endorsed by protocol
+  # section 25. The grid itself was NOT widened. Both criteria and both winners are reported.
+  # Allowed values: "val_cindex" | "cv_mean_cindex".
+  selection_metric: "cv_mean_cindex"
+  # 500 is for THIS development report only. Protocol Table 7 pre-specifies 2,000
+  # replicates for the primary paired patient-level bootstrap on the locked test set;
+  # the training/test notebook must NOT inherit this value.
+  bootstrap_n: 500                       # bootstrap CIs on val metrics
+  # Hard guard: the test split must never be loaded by this module.
+  forbid_test_split: true
+  # Protocol section 19: examine proportional hazards with Schoenfeld residuals, and
+  # include the pre-specified predictor block WITHOUT univariable screening.
+  ph_schoenfeld_csv: "outputs/tables/m0_schoenfeld.csv"
+  predictor_selection: "prespecified_all"
+  # Protocol Table 7 model ladder. M0 is the primary clinical comparator; M1 adds
+  # inferred KLG and is fit on the KLG-eligible subset (Secondary objective 2).
+  predictor_sets:
+    m0: "primary_predictors"
+    m1_klg: "m1_predictors"
+  m1_report_md: "outputs/clinical_m1_klg_report.md"
+  m1_metrics_csv: "outputs/tables/m1_metrics.csv"
+  m1_model_json: "derived-data/cohort/m1_klg_model.json"
+  # Protocol section 20: replay the FROZEN train-fitted transform; never refit.
+  imputation_source: "features_clinical_frozen"
+  # Protocol section 24 sensitivities (report alongside the primary M0).
+  sensitivity:
+    complete_case: true
+    drop_pain_predictors: true
+    race_included: true                  # sensitivity model only; the primary excludes race
+    landmarks_days: [30, 90, 180]
+
+# ---- Track A: Riley sample size (src/sample_size_riley.py) ------------------
+sample_size:
+  report_md: "outputs/sample_size.md"
+  table_csv: "outputs/tables/sample_size_riley.csv"
+  target_shrinkage: 0.9                  # Riley criterion 1: expected uniform shrinkage >= 0.9
+  max_optimism: 0.05                     # Riley criterion 2: |apparent - adjusted| Nagelkerke R2 <= 0.05
+  mape_target: 0.05                      # Riley criterion 3 (survival): margin of error on mean predicted risk
+  timepoint_years: 5
+  # Cox-Snell R2 is unknown a priori; report a range and flag the assumption.
+  r2_fraction_of_max_grid: [0.10, 0.15, 0.20, 0.30]
+  r2_fraction_of_max_primary: 0.15       # conservative default when no prior model exists
+  extra_image_parameters: 0              # image model contributes representation, not free df, to this calc
+  # Alternative window from the re-gate grid, for the widen-or-not recommendation.
+  alternative_window:
+    label: "recovery_any / 3-year pre-index imaging window"
+    window_days: 1095
+    n_final_cohort: 3842
+    primary_events_5y: 547
+  # Protocol section 16 also requires sizing the LOCKED test set by simulation for
+  # acceptable 5-year AUROC / calibration-slope precision.
+  test_precision_simulation:
+    n_test: 741
+    n_test_events: 106
+    # ANALYST-ADOPTED targets. Protocol section 16 requires "acceptable precision" but
+    # states NO numeric target; its only numeric floor is 500 total primary events and
+    # 100 test events, and that floor IS met (533 and 106). Never describe the two
+    # half-widths below as protocol values.
+    target_auroc_ci_halfwidth: 0.05
+    target_calibration_slope_ci_halfwidth: 0.20
+    n_sim: 2000
+    # Assumed true discrimination for the precision simulation. These are scientific
+    # assumptions driving the headline precision conclusion, so they live in config
+    # rather than in code, where the sensitivity would be invisible.
+    true_auroc_grid: [0.65, 0.70, 0.75, 0.80]
+    true_auroc_primary: 0.70
+
+# ---- Track B: bulk image transfer verification (src/verify_transfer.py) -----
+transfer:
+  expected_n_files: 6122
+  manifest_paths: "outputs/tables/image_transfer_manifest_paths.txt"
+  batch_file: "derived-data/cohort/globus_batch.txt"
+  dest_root: "/path/to/your/DICOMs-knee-imaging"
+  verify_report_md: "outputs/transfer_verification.md"
+  dicom_suffix: ".dcm"
+  min_file_bytes: 1024                   # anything smaller is a truncated/partial transfer
+
+# ---- Track C: DICOM -> contralateral crop preprocessing ---------------------
+# Manifest composition (verified): 6,122 images / 3,709 patients.
+#   frontal F: 4,269  -> 4,075 bilateral 'B' (need half-select) + 194 unilateral
+#                        (laterality already == contra_side)
+#   lateral L: 1,659, sunrise S: 162, other E/I: 32  -> ALL already contra-side only
+#   horizontal_flip==1 on 287 images; inverted==1 on 1,478 images
+preprocess:
+  out_size: 512
+  # DICOM decode
+  apply_rescale: true                    # RescaleSlope / RescaleIntercept
+  apply_voi_lut: true                    # WindowCenter/Width or VOI LUT sequence
+  monochrome1_invert: true               # MONOCHROME1 -> higher value = brighter
+  clip_percentiles: [0.5, 99.5]          # per-image robust intensity clip before scaling
+  # Geometry
+  bilateral_display_convention: "radiological"   # patient RIGHT knee appears on IMAGE LEFT
+  apply_horizontal_flip_correction: true         # image.horizontal_flip == 1 mirrors the above
+  half_inset_frac: 0.02                  # inset from the midline so no index-knee pixels survive
+  crop_margin_frac: 0.15                 # padding around the localized joint, as a fraction of crop side
+  min_crop_frac: 0.35                    # crop side >= this fraction of the (half-)image short side
+  max_crop_frac: 0.95
+  standardize_to_left: true              # mirror right knees so every output reads as a left knee
+  mask_border_frac: 0.06                 # blank this fraction of each edge (burned-in L/R markers)
+  # ---- burned-in marker removal (protocol section 13; non-negotiable #1) --------------
+  # The fixed border band above is not sufficient on its own: measured on 500 real TRAIN
+  # crops, 26.4% still carried a laterality letter or positioning marker INSIDE the band
+  # (frontal 15.8%, lateral 52.7%, sunrise 50.0%). Lead markers are saturated, small, and
+  # lie on unexposed background, which is what distinguishes them from saturated bone.
+  # A surviving 'L'/'R' is both a protocol violation and exactly the shortcut section 22
+  # tests for, so these are masked rather than merely reported.
+  mask_markers: true
+  marker_sat_level: 250                  # uint8 value at/above which a pixel counts as saturated
+  marker_min_px: 20                      # ignore specks below this many pixels
+  marker_max_area_frac: 0.01             # ignore blobs larger than 1% of the crop (that is anatomy)
+  marker_ring_px: 6                      # dilation width used to sample the surrounding ring
+  marker_ring_max_level: 60              # ring median must be this dark for the blob to be a marker
+  marker_merge_px: 10                    # dilate candidates by this much to merge multi-glyph text
+                                         # ('L', 'CROSS-TABLE', initials) into ONE region, so a marker
+                                         # is removed whole rather than one letter at a time
+  # Localization (torch-free classical fallback in src/preprocess_images.py; the
+  # Colab notebook may substitute a learned knee-joint detector with the same output contract)
+  # ---- RECALIBRATED 2026-07-26 on 800 random TRAIN images (never val/test) -----------
+  # The classical intensity-profile localizer was the PRIMARY crop centre until real
+  # DICOMs arrived. Measured on real films it is worse than doing nothing: it "failed"
+  # (fell back to centre) on 26.0% overall — 41.4% of single-knee L/R films, whose
+  # geometry it was never designed for — and, more damningly, visual review showed its
+  # *successes* are frequently WORSE than the centre crop, because it locks onto a bright
+  # femoral/tibial shaft or a collimator artifact and drags the box off the joint. The
+  # discarded "failures" were well-centred knees.
+  # Root cause: radiographers centre the knee in the field, so a plain centred box is a
+  # strong prior; the localizer only adds variance.
+  # Therefore the deterministic CENTRED crop is now the primary path, and the localizer is
+  # a refinement that must clear a high confidence bar before it is allowed to move the box.
+  localizer: "intensity_profile"
+  localizer_mode: "center_default"       # center_default | localizer_primary
+  localizer_refine_min_confidence: 0.60  # only a localization at least this confident may
+                                         # override the centred box (observed median 0.21)
+  min_crop_confidence: 0.10              # retained for the Localization contract / T5 detector
+  # Protocol section 13: record the percentage of masked pixels and EXCLUDE crops with
+  # excessive masking. The border band alone is a fixed
+  # 1 - (1 - 2*mask_border_frac)^2 = 22.75% of the output; square_crop padding adds more.
+  # 0.35 was chosen from synthetic geometry and cut 19.2% of real TRAIN images; the real
+  # distribution is p50 0.264 / p90 0.400 / p95 0.439, so 0.45 sits just above p95 and
+  # excludes 4.5% — genuinely mispositioned crops rather than ordinary ones.
+  max_masked_pct: 0.45
+  # A centred crop is a deliberate, valid choice here, NOT a failure, so nothing is
+  # excluded for using it. Excessive masking remains an exclusion.
+  exclude_failed_localization: false
+  # Output shards
+  shards:
+    out_dir: "shards"                    # Colab/Drive-relative default (T5); locally --out-dir wins
+    max_shard_mb: 400
+    name_pattern: "{split}-{index:05d}.tar"
+    sidecar_csv: "labels.csv"
+    image_ext: "png"                     # the WebDataset member extension: .to_tuple("png", "json")
+    image_format: "png"                  # lossless 8-bit; jpeg would bake in artifacts
+  # Per-image label sidecar columns written next to the shards. This is the FROZEN
+  # contract mirrored by notebooks/preprocess_colab.ipynb and read by the training notebook.
+  sidecar_columns: ["empi_anon", "sop_uid", "view", "contra_side", "split",
+                    "event_indicator", "time_from_landmark", "shard", "key",
+                    "crop_method", "crop_confidence", "masked_pct", "sop_uid_short",
+                    "index_side", "laterality", "horizontal_flip", "inverted",
+                    "half_selected", "orientation", "mirrored", "out_size",
+                    "has_frontal", "has_lateral", "has_sunrise", "n_views", "n_views_written"]
+  views_kept: ["frontal", "lateral", "sunrise"]   # E/I "other" views are dropped
+  fail_report_csv: "outputs/tables/preprocess_failures.csv"
+  # Metadata bundle directory name, shared by the Mac-side staging command and the
+  # Colab reader in notebooks/preprocess_colab.ipynb. A silent mismatch breaks the run.
+  colab_metadata_dir: "colab-metadata"
+
+# ---- Track C: crop QA gate (src/crop_qa.py) --------------------------------
+crop_qa:
+  n_per_cell: 12                         # random crops per (view x contra_side) cell
+  contact_sheet: "outputs/figures/crop_qa_contact_sheet.png"
+  checklist_md: "outputs/crop_qa_checklist.md"
+  # QA samples come from TRAIN + VAL only; the test split stays sealed.
+  splits_sampled: ["train", "val"]
+  # CRITICAL (batch-1 review finding): every pre-index film shows TWO NATIVE knees, and
+  # standardize_to_left plus border masking strip the only laterality cues. A finished
+  # crop is therefore anatomically identical whether the correct or the wrong half was
+  # taken, so a crop-only contact sheet CANNOT answer the criteria below. Each tile must
+  # pair the full decoded film (with the selected half outlined) against the PRE-MIRROR
+  # crop, so half-select is visually decidable.
+  show_full_film_in_contact_sheet: true
+  contact_sheet_premirror: true
+  # Reviewer must confirm all three before training is allowed to start.
+  signoff_criteria:
+    - "the outlined half of the full film is the CONTRALATERAL knee (opposite index_side)"
+    - "the crop contains no pixels from the index knee or the midline"
+    - "no residual burned-in laterality marker or text"
+  # ---- Protocol section 23 manual QA (two DISTINCT audits; do not conflate) ----
+  # (i) image-level audit: >=400 index images, two independent reviewers, per-item scoring
+  image_audit_min_images: 400
+  n_reviewers: 2
+  critical_error_threshold: 0.02         # expand the review if any item's error rate exceeds 2%
+  score_items: ["laterality", "view", "native_knee", "crop_adequacy",
+                "burned_in_text", "non_knee_content"]
+  # Label QA precedes registration and is NOT outcome-unblinding, so it spans all splits.
+  audit_splits: ["train", "val", "test"]
+  image_audit_csv: "outputs/tables/image_audit_summary.csv"
+  # (ii) outcome-record audit: >=200 records reviewed via CPT chronology + post-event images
+  outcome_audit_min_records: 200
+  outcome_audit_csv: "outputs/tables/outcome_audit_summary.csv"
+  # Laterality audit (protocol section 7): over-samples side_source == "recovered".
+  laterality_audit_min_patients: 200
+  laterality_audit_csv: "outputs/tables/laterality_audit_summary.csv"
+
+# ---- Track C: multi-view image + clinical fusion model (Colab) -------------
+model_image:
+  # Changed from convnext_tiny on 2026-07-28 (see D28). The original value carried the note
+  # "PRE-SPECIFIED; no architecture tournament", and that is exactly what this change gives
+  # up. It is made on evidence, not on a leaderboard: on THIS cohort ConvNeXt-Tiny never
+  # fitted the training data at all (best training NLL 0.587 against a base rate of 0.610,
+  # a 3.7% fall, and 0.02% for the frontal-only arms), while DenseNet121 on the identical
+  # frontal crops reached 0.350, a 42.6% fall. Underfitting at 3.7% leaves nothing to
+  # regularise; overfitting at 42.6% is a solvable problem. Raising the head learning rate
+  # tenfold did not rescue ConvNeXt: it oscillated around the base rate instead of sitting
+  # on it. Likely cause is BatchNorm, which conditions optimisation on a small cohort in a
+  # way ConvNeXt's LayerNorm does not, compounded by feeding 512px crops to a backbone
+  # pretrained at 224px.
+  architecture: "densenet121"
+  pretrained: "imagenet"
+  shared_encoder_across_views: true
+  view_embedding_dim: 32
+  aggregator: "attention"                # attention set-aggregator over available views
+  survival_head:
+    kind: "discrete_time"
+    n_intervals: 10                      # 10 x six-month intervals = 5 years
+    interval_months: 6
+    loss: "censoring_aware_nll"
+  n_seeds: 5
+  ensemble: "average_hazard"
+  early_stopping:
+    monitor: "val_nll"
+    patience: 8
+  recalibration: "horizon_specific_on_val"
+  batch_size: 32
+  max_epochs: 40
+  lr: 0.0001
+  # Discriminative learning rates (added 2026-07-28, see D28). `lr` applies to the
+  # ImageNet encoder; everything randomly initialised (head, projection, view embedding,
+  # attention pool) trains at lr * head_lr_mult. One rate for both is why the encoder
+  # crawled: the head starts at head_init_scale of its normal magnitude, so it contributes
+  # almost nothing until it grows, and every gradient reaching the encoder is scaled by
+  # that same factor. The primary fusion arm fell only 3.7% below the base-rate TRAINING
+  # loss before early stopping, i.e. it never fitted the data at all.
+  head_lr_mult: 10.0
+  head_init_scale: 0.1
+  # Gradual unfreezing: head-only for the first N epochs, then the backbone thaws. Attacks
+  # both failure modes at once. It stops a randomly initialised head from dragging the
+  # backbone before it has learned anything, and it limits how far the backbone can
+  # memorise, which is the failure DenseNet121 showed (validation NLL ended 0.239 above
+  # its own minimum while training NLL fell to 0.350).
+  freeze_encoder_epochs: 3
+  dropout: 0.3                           # was 0.2; DenseNet121 has capacity to spare here
+  weight_decay: 0.05                     # was 0.01, for the same reason
+  # Protocol section 13 caps augmentation: rotation <= 5 deg, translation and scale <= 5%,
+  # mild intensity perturbation, and NO deformation that changes joint-space geometry.
+  # Do NOT use RandomResizedCrop — it jitters aspect ratio, which is exactly such a deformation.
+  augmentation: ["rotation_5deg", "translate_0.05", "scale_0.05", "brightness_contrast_0.1"]
+  # Protocol section 15: AdamW with gradient clipping and cosine decay.
+  optimizer: "adamw"
+  lr_schedule: "cosine"
+  grad_clip_norm: 1.0
+  warmup_epochs: 2
+  robustness_model: "convnext_tiny"        # frontal-only robustness check (protocol section 24)
+  comparisons: ["frontal_only_vs_multiview", "image_only_vs_clinical_only_vs_fusion"]
+  checkpoint_dir: "checkpoints"          # relative to the Drive project folder
+  # Sealed-test protocol
+  test:
+    read_once: true
+    unlock_requires: ["model frozen", "ensemble rule frozen", "thresholds frozen",
+                      "analysis script frozen", "crop QA signed off",
+                      "laterality QA audit passed"]
+
+  # ---- LOCAL training (src/train_model.py), added 2026-07-26 ----------------
+  # notebooks/train_colab.ipynb remains the record of the Colab/GPU path. This block
+  # drives the device-agnostic local trainer, which is the source a future re-slice
+  # would use. ${HOME} keeps a personal path out of a tracked file (section 28).
+  local:
+    shard_dir: "${HOME}/mrkr-shards"
+    # The sealed split's crops live in a SEPARATE tree, never beside train/val.
+    # `shard_urls` globs "{split}-*.tar", so a test-*.tar sitting inside shard_dir could
+    # be swept up by a stray --split test; keeping it out of reach is a second lock
+    # behind forbid_test_split below rather than a replacement for it.
+    # THIS KEY IS READ, and editing it changes a sealed-split figure render.
+    # src/manuscript_figures.py:172 maps the rendered split onto shard_dir or
+    # test_shard_dir (SHARD_DIR_KEY), and figure 1's crop-side anchor check (:1013) opens
+    # labels.csv underneath the resolved tree to count the sealed split's crops. Point it
+    # at the wrong tree and that check fails rather than drawing a wrong number.
+    # src/score_test.py is the exception: it still takes the tree as a REQUIRED --shard-dir
+    # argument (src/score_test.py:205) and never consults the config, so the value here and
+    # the operator's command line have to be kept in agreement by hand.
+    test_shard_dir: "${HOME}/mrkr-shards-test"
+    cache_dir: "${HOME}/mrkr-cache"
+    checkpoint_dir: "${HOME}/mrkr-ckpt"
+    device_preference: ["cuda", "mps", "cpu"]
+    amp_devices: ["cuda"]              # AMP only on cuda; mps/cpu run in float32
+    num_workers: 4
+    grad_accum_steps: 1                # raise this, never downscale the 512px image
+    seeds: [20250720, 20250721, 20250722, 20250723, 20250724]
+    event_aware_minibatch: false       # off keeps the natural prevalence
+    history_csv: "outputs/tables/train_history.csv"
+    seed_variability_csv: "outputs/tables/seed_variability.csv"
+    forbid_test_split: true
+    stages:
+      stage1: ["m0d_clinical", "m1_klg", "m4_fusion", "m3_image"]
+      stage2: ["m2_frontal", "m4_frontal", "r1_densenet_frontal"]
+    arms:
+      m0d_clinical:
+        {mode: "clinical_only", views: ["frontal", "lateral", "sunrise"], design: "m0",
+         arch: "densenet121", label: "M0d clinical-only discrete-time"}
+      m1_klg:
+        {mode: "clinical_only", views: ["frontal", "lateral", "sunrise"], design: "m1",
+         arch: "densenet121", label: "M1 clinical plus inferred KLG (KLG-eligible subset)"}
+      m4_fusion:
+        {mode: "fusion", views: ["frontal", "lateral", "sunrise"], design: "m0",
+         arch: "densenet121", label: "M4 multimodal fusion (PRIMARY)"}
+      m3_image:
+        {mode: "image_only", views: ["frontal", "lateral", "sunrise"], design: "m0",
+         arch: "densenet121", label: "M3 multi-view image"}
+      m2_frontal:
+        {mode: "image_only", views: ["frontal"], design: "m0",
+         arch: "densenet121", label: "M2 frontal-only image"}
+      m4_frontal:
+        {mode: "fusion", views: ["frontal"], design: "m0",
+         arch: "densenet121", label: "M4 restricted to frontal (section 24)"}
+      # Renamed in effect, not in key: with densenet121 now the primary backbone, the
+      # section-25 robustness arm must be the OTHER architecture or it checks nothing.
+      r1_densenet_frontal:
+        {mode: "image_only", views: ["frontal"], design: "m0",
+         arch: "convnext_tiny", label: "R1 ConvNeXt-Tiny frontal-only robustness (section 25)"}
+
+# ---- Validation evaluation of the model ladder (src/eval_models.py) ---------
+# The test split is NOT read. Everything here is the 371-patient / 54-event
+# validation split. bootstrap_n is 2,000 (protocol Table 7) and deliberately does
+# NOT inherit model_clinical.bootstrap_n: 500, which is a development-report value.
+model_eval:
+  horizons_days: [365, 730, 1825]      # 1826 is administrative censoring: no controls there
+  bootstrap_n: 2000
+  bootstrap_seed: 20250720
+  subset_arms: ["m1_klg"]              # scored on the KLG-eligible subset, not the common set
+  # `&horizon_5y` is the single declaration of the 5-year horizon in days. The
+  # decision-curve block below aliases it (`*horizon_5y`) instead of repeating 1825, so
+  # the net-benefit curve and the primary estimand cannot silently drift apart.
+  primary_contrast: {model: "m4_fusion", reference: "m0", horizon_days: &horizon_5y 1825}
+  comparison_families:
+    modality: [["m3_image", "m0"], ["m4_fusion", "m3_image"],
+               ["m0d_clinical", "m0"], ["m4_fusion", "m0d_clinical"]]
+    views: [["m4_fusion", "m4_frontal"], ["m3_image", "m2_frontal"]]
+    robustness: [["m2_frontal", "r1_densenet_frontal"]]
+  fdr_method: "bh"
+  metrics_csv: "outputs/tables/val_metrics.csv"
+  comparisons_csv: "outputs/tables/val_comparisons.csv"
+  subgroups_csv: "outputs/tables/val_subgroups.csv"
+  convergence_csv: "outputs/tables/val_convergence.csv"
+  net_benefit_csv: "outputs/tables/val_net_benefit.csv"
+  results_json: "derived-data/cohort/val_results.json"
+  suppress_below_events: 50            # protocol section 21
+  forbid_test_split: true
+  # ---- Convergence gate (added 2026-07-27, see D28) ------------------------
+  # An arm that never fitted a model still produces a full row of metrics, and a
+  # constant predictor scores AUROC exactly 0.500 - which reads as "no better than
+  # chance" when the truth is "did not train". Contrasts against such an arm measure
+  # the training failure, not the comparison, so they are suppressed the same way
+  # protocol section 21 suppresses a subgroup below the event floor.
+  # Thresholds are on the MEAN over seeds of the per-seed quantity.
+  min_train_nll_drop: 0.001    # first-epoch minus last-epoch training NLL
+  max_val_overfit_gap: 0.10    # last-epoch validation NLL minus its own minimum
+  # ---- Decision-curve analysis (protocol section 18; D29) ------------------
+  # Section 18 pre-specifies exploratory DCA and cites Vickers, so the analysis is
+  # pre-specified IN KIND; the numeric thresholds appear nowhere in the protocol and D18
+  # recorded DCA as not run, so adding it after the sealed read is post-hoc IN TIMING.
+  # Recorded as D29. The range below is anchored to the DEVELOPMENT 5-year Kaplan-Meier
+  # risk (0.2002), never to the test 0.2004, so no test quantity entered the choice.
+  # Net benefit is estimated by Kaplan-Meier WITHIN the flagged set, not by per-patient
+  # IPCW: 63.8% of test patients are censored before the horizon, and KM-within-subset
+  # needs only censoring independent of outcome GIVEN membership of the flagged set,
+  # which is strictly weaker than IPCW's censoring-independent-of-the-predictors
+  # assumption - and here follow-up is administrative EHR contact, which plausibly
+  # tracks the very comorbidity and radiographic severity the model reads off the film.
+  # Rows route through the same suppress_unfit_contrasts semantics as every other
+  # contrast, so did_not_converge suppresses on both splits and severe_overfit on val only.
+  net_benefit:
+    # Threshold grid on an INTEGER-PERCENT basis. The module must build it as
+    #   np.arange(threshold_min_pct, threshold_max_pct + 1, dtype=int) / 100.0
+    # and never as a float np.arange: float accumulation leaves 0.07 as a non-nearest
+    # double, so `risk >= p_t` would flag a different set of patients on a different
+    # numpy build and the curve would stop being reproducible.
+    threshold_min_pct: 1
+    threshold_max_pct: 35        # the CSV carries all 35 thresholds, 0.01 to 0.35, so no
+                                 # shopped point can hide behind a trimmed range
+    # src/eval_models.py freezes NB_THRESHOLD_CEILING_PCT = 50 IN THE MODULE and checks
+    # threshold_max_pct against it, so a config edit alone cannot push the grid into the
+    # region where the odds weight p/(1-p) amplifies error (19x more at 0.50 than at
+    # 0.05) and where m0's curve is identically zero above its 0.4715 maximum risk.
+    plot_min_pct: 2              # figure 4 plots 0.02 to 0.30 only, about 1.5x the 20.0%
+    plot_max_pct: 30             # 5-year prevalence: m0's curve visibly oscillates from
+                                 # 0.26 up, and at p_t = 0.30 35.6% of m4_fusion bootstrap
+                                 # replicates have nobody in the flagged set followed to
+                                 # the horizon
+    # m2_frontal is the protagonist (one frontal film already in the chart); m4_fusion
+    # stays because protocol section 18 pins M4 vs M0 as primary, and M2's curve sitting
+    # on M4's IS the visual argument that extra views and clinical data buy nothing. The
+    # arms rest on different populations (741 / 734 / 707 patients) and are deliberately
+    # NOT restricted to the common intersection, which would discard 8 of 106 events for
+    # nothing; each paired difference is computed on its own intersection and the caption
+    # discloses the denominator.
+    arms: ["m2_frontal", "m1", "m0", "m4_fusion"]
+    reference: "m0"              # differences are reported against this arm and treat-all
+    horizon_days: *horizon_5y    # the 5-year horizon declared once, at primary_contrast
+    # FLAGGED, not suppressed: the row stays in the CSV and only the figure truncates a
+    # curve where its flag first trips. Blanking the thresholds at which a model flags
+    # few events would delete exactly the evidence of imprecision a reader needs.
+    sparse_events_min: 15
+
+# ---- Manuscript (src/make_manuscript.py, src/manuscript_figures.py) ---------
+manuscript:
+  out_docx: "outputs/manuscript/MRKR_contralateral_TKA_methods_results.docx"
+  # ---- Which split the manuscript reports (added 2026-07-30) ---------------
+  # The single permitted sealed read HAS been performed (741 patients, 106 events), so
+  # the paper reports the TEST split. Validation numbers are no longer reportable as
+  # performance: every image arm's checkpoint was chosen on validation NLL and the
+  # recalibration was fitted on the same 371 patients the slope is measured on, so a
+  # validation metric is optimistic by construction. That circularity is exactly why
+  # `severe_overfit` stops disqualifying an arm on the sealed split
+  # (src/eval_models.py::suppress_unfit_contrasts) - a test estimate took no part in the
+  # selection, so it cannot be inflated by it.
+  # This is NOT an unsealing switch. The sealed read is a completed, recorded event; the
+  # three forbid_test_split flags above still guard every module that must never touch
+  # the test split.
+  # BOTH manuscript modules take a --split {val,test} flag that DEFAULTS from this key:
+  # src/make_manuscript.py:4409 and src/manuscript_figures.py:2708. This key is therefore
+  # the default, not the only control, and a one-off validation render needs no config edit.
+  #
+  # There is no rollback that reproduces v1, and the instruction that claimed one has been
+  # removed rather than left to be found by an operator. v2 rewrote the prose of every
+  # section, so a validation render produces v2's sentences over validation numbers: a
+  # different document from v1, whose Methods and Results were 882 and 702 words. A
+  # `--split val` render aborts today and writes no file, on two self-checks:
+  #   1. manuscript.figures_dir holds a manifest recording images drawn for the TEST split.
+  #      That failure is CORRECT and must stay. It tells the operator to run
+  #      `python -m src.manuscript_figures --split val --only all` first, which rewrites
+  #      outputs/figures/manuscript/ and outputs/tables/val_risk_tertiles.csv; the sealed
+  #      figures then have to be re-rendered before this document can be rebuilt.
+  #   2. Methods plus Results comes to 1,385 words against target_words below, which is
+  #      calibrated to the test document. The budgets are deliberately NOT split-aware: a
+  #      per-split target would be a number fitted to whatever the prose happened to
+  #      produce rather than a budget, and word_count_tolerance must not be widened to
+  #      absorb the difference. An operator who genuinely wants a validation render has to
+  #      set the four word targets to what validation prose needs, in the same commit, and
+  #      record that here.
+  report_split: "test"
+  font: "Times New Roman"
+  font_size_pt: 11
+  line_spacing: 2.0
+  # Raised from 1300 on 2026-07-28. The convergence gate added a Methods paragraph and a
+  # Results paragraph that did not exist when the target was set, and they carry the
+  # paper's central finding: two arms that never fitted a model, and one that memorised
+  # the training split while posting the highest validation AUROC in the ladder. Trimming
+  # to the old budget would mean cutting the result the paper is about.
+  # Raised again to 1650 on 2026-07-28, after the calibration caveat was added: with the
+  # recalibration fitted on the same 371 patients the slope is measured on, every slope
+  # returns 1.00 by construction, and reporting that range without saying so would read as
+  # evidence of good calibration. That sentence is honesty-critical and is not trimmable.
+  # The word target is a house style preference, not a scientific constraint; the content
+  # grew because the study produced more to report, not because the prose became loose.
+  # Lowered to 1300 for v2 on 2026-07-30, and the meaning is unchanged: this is still
+  # Methods plus Results only, and it is now exactly the sum of the Methods and Results
+  # entries of section_target_words below. What is checked, and where: verify() compares
+  # ONLY this combined target with the rendered Methods plus Results
+  # (src/make_manuscript.py:4187-4199); target_words_methods and target_words_results are
+  # printed there but never checked. section_target_words is read by no render module, but
+  # it IS checked against rendered text, by
+  # tests/test_make_manuscript.py::test_every_section_of_the_reported_split_is_within_its_budget,
+  # which builds the reported split and holds every section to its own budget at
+  # word_count_tolerance. A per-section budget is therefore a gate; it lives in the suite
+  # rather than in verify(). The three restatements of one budget are held together the
+  # same way: tests/test_eval_models.py asserts target_words == Methods + Results and that
+  # both mirrors match. The reduction IS the v2 argument. The convergence
+  # machinery, the estimator pedantry and the nine-arm recital were written for a paper
+  # whose headline was a training failure; on the sealed split the headline is a result,
+  # and the prose that carried the failure narrative is what pays for an Introduction, a
+  # Discussion and a Conclusion without inflating the paper.
+  # RAISED on 2026-07-30, from 1300 / 700 / 600, and the reason is a correction pass
+  # rather than looser prose. Every added word is a disclosure the artefacts require and
+  # none of it is trimmable:
+  #   Methods 700 -> 775. Two histories the section did not state. DenseNet121 was NOT the
+  #     plan: protocol section 14 pre-specified ConvNeXt-Tiny and deviation D28 replaced it
+  #     after the pre-specified configuration failed to fit, so the exploratory label
+  #     belonged in the section that describes the design and not only in the Results.
+  #     And the decision curve's estimator, threshold grid and arm set were fixed AFTER the
+  #     sealed read (D29), which the register requires be stated rather than inferred.
+  #   Results 600 -> 780. The per-tertile incidences, which the plan requires in prose and
+  #     which existed only inside the Figure 3 image; the contrast that was actually
+  #     pre-declared for the combined arm, re-attached to the right pair; the largest of
+  #     the view nulls, whose omission read as selective; the paired reference estimate a
+  #     reader could not otherwise reconcile; and the direction and units of
+  #     calibration-in-the-large. One sentence was CUT to pay for part of it: a confidence
+  #     interval benchmarked against the largest effect in the ladder was not an
+  #     interpretable quantity.
+  #   The word target is a house style preference. A false or missing sentence is a defect,
+  #   and the tolerance below was NOT widened to absorb any of this.
+  # RAISED AGAIN on 2026-07-30, from 1555 / 775 / 780, by a second correction pass. Every
+  # added word is a disclosure an artefact requires, and two sentences were CUT to pay for
+  # part of it. word_count_tolerance is unchanged at 0.05 and was not widened.
+  #   Methods 775 -> 885. Three things the section did not say about the comparator the
+  #     paper's headline claim beats. (a) TWO of M0's eleven predictors are not the
+  #     variables protocol Table 6 defines: comorbidity uses all pre-index history against
+  #     Table 6's "prior 5 years" (D20), and pain is a MAX over 365 days against Table 6's
+  #     "most recent contralateral or bilateral score in prior 180 days" (D21). Both are
+  #     open items in the register, nothing in the pipeline was changed for either, and a
+  #     reviewer has to be able to see the departure and the direction it could cut.
+  #     (b) M0's ridge penalizer sits at the LOWER edge of the pre-specified grid, which was
+  #     not widened when the selection metric moved to training-split cross-validation
+  #     (D23, D24); a boundary solution is the first thing a statistical reviewer asks
+  #     about. Both are emitted from the artefacts (features_clinical config keys, and
+  #     m0_clinical_model.json's penalizer_at_grid_edge / grid_edge_side), so a
+  #     configuration that stops departing retires its own sentence.
+  #     CUT to pay for part of it: "The question is the patient's: how likely is it that
+  #     this knee will be replaced too?", 17 words restating a frame the Introduction
+  #     already sets in the patient's own words.
+  #   Results 780 -> 855. (a) The missingness sentence now names BOTH denominators, because
+  #     7.0% in the text and 7.2% in Table 1 on the facing page are the same quantity over
+  #     different patients and nothing said so. (b) A threshold is DEFINED at first use;
+  #     the number arrived with no definition anywhere in the body. (c) What acting on a
+  #     flagged patient would mean is stated plainly: protocol section 18 calls this
+  #     analysis exploratory precisely because "a specific risk-triggered intervention has
+  #     not yet been validated", so the curves compare models and recommend nothing.
+  #     (d) The dominant subgroup level's share now carries its denominator, 673 of the 740
+  #     patients the audit scores, instead of "90.9% of the audited split", a noun that
+  #     appeared nowhere else in the document. CUT to pay for part of it: "A radiologist's
+  #     grade is untested here", which the Discussion says in the same words.
+  target_words: 1740                   # Methods + Results only
+  target_words_methods: 885            # mirrors section_target_words Methods
+  target_words_results: 855            # mirrors section_target_words Results
+  word_count_tolerance: 0.05           # +/-5%, applied to every word target on this page
+  # ---- Per-section word targets (v2, 2026-07-30) ---------------------------
+  # Keys are the IMRaD headings spelled VERBATIM as make_manuscript.IMRAD_HEADINGS
+  # spells them, so a reader can look each section up by the heading the render already
+  # iterates. verify() is not that reader; the budget test named below is.
+  # Two things here are under test. The SPELLING: tests/test_eval_models.py asserts the six
+  # keys equal IMRAD_HEADINGS in order, so a later edit to the headings cannot desynchronise
+  # them in silence. And the BUDGETS: tests/test_make_manuscript.py builds the reported
+  # split and holds every section to its own target at the same word_count_tolerance as the
+  # combined target_words above, i.e. +/-5%, which makes Abstract's 0 exact and Conclusion's
+  # 80 [76, 84]. These six numbers are a gate; verify() is simply not where that gate lives.
+  # Total prose 2,675 words after the 2026-07-30 correction pass raised Methods, Results and
+  # Discussion, against v1's target of 1,650, which covered Methods and Results only.
+  section_target_words:
+    Abstract: 0        # stays empty on purpose: the author writes it at submission, to
+                       # the target journal's own structure and word limit
+    Introduction: 350  # 4 paragraphs; every claim rests on an already-pinned reference
+    Methods: 885       # 700, then 775, until the 2026-07-30 correction passes; see
+                       # target_words above for the four disclosures the section was
+                       # missing (D28's backbone history, D29's post-hoc timing, D20/D21's
+                       # comparator predictor definitions, D23/D24's boundary penalizer)
+    Results: 855       # 600, then 780, until the 2026-07-30 correction passes; see
+                       # target_words above. The plan said 762; that was never rendered and
+                       # is retracted
+    Discussion: 715    # 5 paragraphs. 500, then 690, until the 2026-07-30 correction
+                       # passes. The last 25 words are D20 and D21: protocol Table 6
+                       # defines the comorbidity predictor over the prior 5 years and the
+                       # pain predictor as the most recent contralateral score in 180 days,
+                       # and the comparator M0 implements neither. Both entries are headed
+                       # FLAGGED FOR AUTHOR DECISION, and M0 is the arm the paper's headline
+                       # claim beats, so how its predictors were built is not a detail the
+                       # reader can be left to find in the register.
+                       # 500 until 2026-07-30, when the limitations were
+                       # corrected against the artefacts they cite: no human has inspected
+                       # any image the reported results rest on, because the section-23
+                       # audit sampled only the splits whose crops exist; no raw agreement
+                       # or Cohen kappa is reported for any of the three audits; the
+                       # "large share" of films whose contralateral side is model-inferred
+                       # is 4,075 of 4,269 bilateral frontals with the index side inferred
+                       # for 49.3% of patients; and the residual burned-in markers the
+                       # border mask did not remove. D13 and D16 also require, in their own
+                       # words, that the sensitivities they defer be "explicitly declared
+                       # not done, with this rationale, in the manuscript's limitations",
+                       # and neither was mentioned anywhere in the document
+    Conclusion: 80
+  figures_dir: "outputs/figures/manuscript"
+  figure_dpi: 300
+  single_column_in: 3.3
+  double_column_in: 6.7

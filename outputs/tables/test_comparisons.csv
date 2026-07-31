@@ -1,0 +1,9 @@
+family,model,reference,metric,horizon_days,n_paired,estimate_model,estimate_reference,difference,ci_lo,ci_hi,p_two_sided,p_adjusted,fdr_method,is_primary,note
+primary,m4_fusion,m0,auc,1825,740,0.844257,0.680394,0.163863,0.087098,0.239618,0.0005,,,True,"paired on the 740 patients both arms score (m4_fusion scores 740, m0 scores 741)"
+modality,m3_image,m0,auc,1825,740,0.839904,0.680394,0.159511,0.083273,0.237536,0.0005,0.001,bh,False,"paired on the 740 patients both arms score (m3_image scores 740, m0 scores 741)"
+modality,m4_fusion,m3_image,auc,1825,740,0.844257,0.839904,0.004353,-0.014322,0.023014,0.642,0.642,bh,False,
+modality,m0d_clinical,m0,auc,1825,740,0.696212,0.680394,0.015818,-0.003328,0.036013,0.103,0.137333,bh,False,"paired on the 740 patients both arms score (m0d_clinical scores 740, m0 scores 741)"
+modality,m4_fusion,m0d_clinical,auc,1825,740,0.844257,0.696212,0.148045,0.07038,0.225352,0.0005,0.001,bh,False,
+robustness,m2_frontal,r1_densenet_frontal,auc,1825,734,0.836759,0.70936,0.127399,0.075802,0.176278,0.0005,0.0005,bh,False,
+views,m4_fusion,m4_frontal,auc,1825,734,0.849357,0.817966,0.031391,-0.005186,0.070579,0.094,0.188,bh,False,"paired on the 734 patients both arms score (m4_fusion scores 740, m4_frontal scores 734)"
+views,m3_image,m2_frontal,auc,1825,734,0.845817,0.836759,0.009058,-0.027666,0.048358,0.614,0.614,bh,False,"paired on the 734 patients both arms score (m3_image scores 740, m2_frontal scores 734)"

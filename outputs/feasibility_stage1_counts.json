@@ -1,0 +1,224 @@
+{
+  "label": "PRELIMINARY",
+  "study": "MRKR Contralateral TKA \u2014 Phase-1 metadata-only feasibility",
+  "note": "Preliminary read-only counts; NOT the locked cohort. Aggregates only.",
+  "timeline": {
+    "landmark_days": 90,
+    "event_start_day": 91,
+    "horizon_days": 1826,
+    "age_min": 40.0
+  },
+  "modifier": {
+    "n_records_27447": 14076,
+    "n_patients_27447": 8525,
+    "n_blank_records": 8613,
+    "pct_blank_records": 61.189,
+    "patients_by_quality_flag": {
+      "bilateral_50": 11,
+      "missing": 6952,
+      "multi_single_side": 11,
+      "single_lt": 2637,
+      "single_rt": 2786,
+      "uninterpretable": 1
+    }
+  },
+  "strategies": {
+    "n_patients_with_27447": 8525,
+    "n_with_any_single_side_27447": 4730,
+    "n_strict": 4222,
+    "n_with_earlier_unsided_before_first_sided": 508,
+    "n_permissive": 3740,
+    "delta_permissive_minus_strict": -482
+  },
+  "side_recovery": {
+    "blank_index_population": 4300,
+    "same_day_image_laterality_present": 3370,
+    "icd_m17_present": 2630,
+    "studydesc_present": 3333,
+    "any_signal_present": 3744,
+    "concordant_single_side": 2983,
+    "pct_any_signal": 87.07,
+    "pct_concordant_single": 69.372
+  },
+  "infection": {
+    "n_strict_candidates": 4222,
+    "high_specificity_excluded": 6,
+    "high_specificity_pct": 0.142,
+    "sensitivity_excluded": 10,
+    "sensitivity_pct": 0.237,
+    "lifetime_knee_osteomyelitis": 1389,
+    "lifetime_joint_infection": 551,
+    "lifetime_either": 1792
+  },
+  "flow_strict": {
+    "S0": 83011,
+    "S1": 83011,
+    "S2": 8525,
+    "S3": 4730,
+    "S4": 4222,
+    "S5": 4203,
+    "S6": 3756,
+    "S7a": 3752,
+    "S7b": 3749,
+    "S8": 1807,
+    "S9": 1775,
+    "S10": 1664,
+    "S11": 1664
+  },
+  "flow_permissive": {
+    "S0": 83011,
+    "S1": 83011,
+    "S2": 8525,
+    "S3": 4730,
+    "S4": 3740,
+    "S5": 3721,
+    "S6": 3721,
+    "S7a": 3717,
+    "S7b": 3714,
+    "S8": 1806,
+    "S9": 1775,
+    "S10": 1662,
+    "S11": 1662
+  },
+  "events": {
+    "n_cohort_strict": 1664,
+    "primary_5y": 357,
+    "primary_pct": 21.454,
+    "upper_bound_5y": 381,
+    "capture_gap": 24,
+    "secondary_from_day1": {
+      "365": 247,
+      "730": 309,
+      "1826": 357
+    },
+    "secondary_from_day91": {
+      "365": 247,
+      "730": 309,
+      "1826": 357
+    },
+    "n_cohort_permissive": 1662,
+    "primary_5y_permissive": 351
+  },
+  "subgroups": {
+    "sex_Female": {
+      "n": 1035,
+      "events": 227,
+      "flag": ">=100"
+    },
+    "sex_Male": {
+      "n": 629,
+      "events": 130,
+      "flag": ">=100"
+    },
+    "age_lt_65": {
+      "n": 657,
+      "events": 153,
+      "flag": ">=100"
+    },
+    "age_ge_65": {
+      "n": 1007,
+      "events": 204,
+      "flag": ">=100"
+    },
+    "race_Black": {
+      "n": 534,
+      "events": 109,
+      "flag": ">=100"
+    },
+    "race_White": {
+      "n": 955,
+      "events": 212,
+      "flag": ">=100"
+    },
+    "race_Asian": {
+      "n": 49,
+      "events": 8,
+      "flag": "<50"
+    },
+    "obesity_yes": {
+      "n": 947,
+      "events": 243,
+      "flag": ">=100"
+    },
+    "obesity_no": {
+      "n": 717,
+      "events": 114,
+      "flag": ">=100"
+    },
+    "weight_bearing_preindex": {
+      "n": 1568,
+      "events": 337,
+      "flag": ">=100"
+    },
+    "non_weight_bearing_preindex": {
+      "n": 96,
+      "events": 20,
+      "flag": "<50"
+    },
+    "frontal_only_preindex": {
+      "n": 4,
+      "events": 0,
+      "flag": "<50"
+    },
+    "multiview_preindex": {
+      "n": 1659,
+      "events": 357,
+      "flag": ">=100"
+    }
+  },
+  "floors": {
+    "primary_events": 357,
+    "primary_events_min": 500,
+    "primary_events_meets_floor": false,
+    "test_allocatable_est_20pct": 71,
+    "test_allocatable_min": 100,
+    "test_allocatable_meets_floor": false,
+    "upper_bound_primary_events": 381,
+    "upper_bound_meets_floor": false
+  },
+  "decision_anchors": {
+    "label": "PRELIMINARY",
+    "note": "Five decision-critical quantities re-derived from the same strict-cohort in-memory structures (df447/per/S/stepsS). Aggregates only; no cohort computation or existing value was changed.",
+    "ceiling_exact_token": 699,
+    "ceiling_parse_modifier": 701,
+    "pregate_contra_5y_events_strict_age40": 618,
+    "same_day_companion_strict": 2604,
+    "same_day_companion_strict_exact_token": 2597,
+    "any_preindex_radiograph_1yr_n": 2369,
+    "any_preindex_radiograph_1yr_pct": 56.365,
+    "contralateral_eligible_1yr_pct": 42.993,
+    "imaging_window_sensitivity_lever1": [
+      {
+        "window_days": "365",
+        "n_with_contralateral_image": 2117,
+        "pct_increase_over_365": 0.0
+      },
+      {
+        "window_days": "730",
+        "n_with_contralateral_image": 2444,
+        "pct_increase_over_365": 15.446
+      },
+      {
+        "window_days": "1095",
+        "n_with_contralateral_image": 2594,
+        "pct_increase_over_365": 22.532
+      },
+      {
+        "window_days": "lifetime",
+        "n_with_contralateral_image": 2827,
+        "pct_increase_over_365": 33.538
+      }
+    ],
+    "_definitions": {
+      "ceiling_exact_token": "distinct 27447 patients with >=1 exact-token RT (single_rt) AND >=1 exact-token LT (single_lt) record, any interval",
+      "ceiling_parse_modifier": "distinct 27447 patients with >=1 parse_modifier single-side R AND >=1 single-side L record (includes multi_single_side e.g. 'RT XP'), any interval",
+      "pregate_contra_5y_events_strict_age40": "STRICT age>=40 index patients (S5=4203) with a contralateral laterality-coded 27447 in (90,1826] days from index, BEFORE the S6-S10 gates",
+      "same_day_companion_strict": "STRICT index patients (S4=4222) whose earliest 27447 date has exactly one parse_modifier single-side (RT xor LT) record PLUS >=1 same-day blank/NULL-modifier 27447 companion line (module-native single-side definition; definitive)",
+      "same_day_companion_strict_exact_token": "as same_day_companion_strict but counting only exact-token single_rt/single_lt as the single-side record; the 2604-vs-2597 gap is multi_single_side ('RT XP'-type) earliest lines (resolves the 2604-vs-2597 memo discrepancy)",
+      "any_preindex_radiograph_1yr_n": "STRICT age>=40 index patients (S5=4203) with ANY image (any laterality/view) with StudyDate in [index-365, index-1]",
+      "any_preindex_radiograph_1yr_pct": "any_preindex_radiograph_1yr_n / S5",
+      "contralateral_eligible_1yr_pct": "S8/S5 = 1807/4203: contralateral-specific eligible pre-index image rate (contra laterality OR B-frontal, 1-365d), for contrast with the any-radiograph rate",
+      "imaging_window_sensitivity_lever1": "STRICT age>=40 (S5=4203) with >=1 eligible contralateral pre-index image (contra laterality OR B-frontal) per widening pre-index window; pct_increase_over_365 vs the 1-365d count; also written to stage1_imaging_window_sensitivity.csv"
+    }
+  }
+}

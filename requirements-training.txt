@@ -1,0 +1,55 @@
+# MRKR Contralateral TKA - Phase 2 LOCAL TRAINING environment.
+#
+# Deliberately SEPARATE from requirements.txt. That file is pinned to the Python 3.14
+# interpreter the Phase-1 / Track-A pipeline runs on, and torch does not support 3.14.
+# This file pins the Python 3.12 virtualenv that src/train_model.py and src/eval_models.py
+# use. The two interpreters coexist; neither file is a superset of the other.
+#
+# Interpreter: CPython 3.12.13 (main Mar 25 2026 03:16:06), macOS-26.5.1-arm64-arm-64bit.
+# Provisioned with `uv python install 3.12` because the pyenv 3.12.8 build on this machine
+# was compiled without liblzma, and `import torchvision` fails on the missing _lzma module.
+#
+# Create with:
+#   uv python install 3.12
+#   $(uv python find 3.12) -m venv ~/.venvs/mrkr-torch
+#   ~/.venvs/mrkr-torch/bin/python -m pip install -r requirements-training.txt
+#
+# Resolved versions recorded in outputs/environment_training.json (protocol section 28).
+
+# device-agnostic tensor/autograd backend; MPS on this M4 Pro, cuda in Colab
+torch==2.13.0
+# transforms.functional for the section-13-capped affine augmentation
+torchvision==0.28.0
+# ConvNeXt-Tiny and DenseNet121 encoders with ImageNet initialisation
+timm==1.0.28
+numpy==2.5.1
+pandas==2.3.3
+pyarrow==25.0.0
+scipy==1.18.0
+scikit-learn==1.9.0
+lifelines==0.30.3
+patsy==1.0.2
+statsmodels==0.14.6
+matplotlib==3.11.1
+pillow==12.3.0
+python-docx==1.2.0
+pyyaml==6.0.3
+# src/features_clinical.py and src/followup.py import duckdb at module level, and
+# src/model_clinical.py imports both, so anything replaying the frozen clinical
+# contract needs it even though this environment opens no DuckDB database.
+duckdb==1.5.5
+pytest==9.1.1
+# TEST SUPPORT ONLY, so that one interpreter runs the whole suite. This environment
+# decodes no DICOM: preprocessing already ran on the 3.14 interpreter and its output is
+# the frozen shard set in ~/mrkr-shards. But tests/test_preprocess_images.py imports
+# src/preprocess_images.py, which imports pydicom at module level, so without this the
+# suite splits across two interpreters and 4 tests fail here on ModuleNotFoundError.
+# The JPEG-Lossless decoders (python-gdcm, pylibjpeg*) are deliberately NOT mirrored:
+# those 49 tests build synthetic uncompressed datasets and pass without them, and no
+# real MRKR pixel data is ever read on this interpreter.
+pydicom==3.0.2
+
+# NOTE: webdataset is NOT required. The Colab notebook reads the shards through
+# webdataset; src/train_model.py reads the same .tar shards with the stdlib tarfile
+# reader (the notebook's own documented fallback), which yields an identical
+# (key, array, meta) stream and removes a dependency.

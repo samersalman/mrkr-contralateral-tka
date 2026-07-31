@@ -1,0 +1,14 @@
+label,subgroup,n_patients,n_primary_events,event_flag
+PRELIMINARY,sex_Female,1035,227,>=100
+PRELIMINARY,sex_Male,629,130,>=100
+PRELIMINARY,age_lt_65,657,153,>=100
+PRELIMINARY,age_ge_65,1007,204,>=100
+PRELIMINARY,race_Black,534,109,>=100
+PRELIMINARY,race_White,955,212,>=100
+PRELIMINARY,race_Asian,49,8,<50
+PRELIMINARY,obesity_yes,947,243,>=100
+PRELIMINARY,obesity_no,717,114,>=100
+PRELIMINARY,weight_bearing_preindex,1568,337,>=100
+PRELIMINARY,non_weight_bearing_preindex,96,20,<50
+PRELIMINARY,frontal_only_preindex,4,0,<50
+PRELIMINARY,multiview_preindex,1659,357,>=100

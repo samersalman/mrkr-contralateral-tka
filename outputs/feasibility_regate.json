@@ -1,0 +1,483 @@
+{
+  "label": "PRELIMINARY",
+  "study": "MRKR Contralateral TKA \u2014 Phase-1 metadata-only feasibility RE-GATE",
+  "note": "Primary-event grid over (imaging window x cohort strategy). Strict-cohort construction and every gate are reused verbatim from preliminary_counts; only the pre-index imaging window (gate 4) and the index-side recovery vary. Aggregates only; no patient identifiers; no post-index leakage.",
+  "timeline": {
+    "landmark_days": 90,
+    "event_start_day": 91,
+    "horizon_days": 1826,
+    "age_min": 40.0
+  },
+  "floors": {
+    "primary_events_min": 500,
+    "test_allocatable_min": 100
+  },
+  "axes": {
+    "strategies": [
+      "strict",
+      "recovery_any",
+      "recovery_confirmed"
+    ],
+    "windows": [
+      "365",
+      "730",
+      "1095",
+      "lifetime"
+    ]
+  },
+  "base_populations": {
+    "n_strict_index": 4222,
+    "blank_index_population": 4300,
+    "concordant_single_side_recovered": 2983,
+    "confirmed_recovered_ge2_signals": 2681
+  },
+  "strategy_recovery": {
+    "strict": {
+      "n_index": 4222,
+      "n_recovered_index": 0,
+      "recovered_note": "no recovery; index side always coded"
+    },
+    "recovery_any": {
+      "n_index": 7205,
+      "n_recovered_index": 2983,
+      "recovered_side_R": 1567,
+      "recovered_side_L": 1416,
+      "agreeing_signal_count_hist": {
+        "1_signal": 302,
+        "2_signals": 996,
+        "3_signals": 1685
+      },
+      "signal_present_on_recovered_side": {
+        "same_day_image_laterality": 2708,
+        "icd_m17_on_or_before": 1960,
+        "same_day_studydesc_text": 2681
+      }
+    },
+    "recovery_confirmed": {
+      "n_index": 6903,
+      "n_recovered_index": 2681,
+      "recovered_side_R": 1408,
+      "recovered_side_L": 1273,
+      "agreeing_signal_count_hist": {
+        "1_signal": 0,
+        "2_signals": 996,
+        "3_signals": 1685
+      },
+      "signal_present_on_recovered_side": {
+        "same_day_image_laterality": 2681,
+        "icd_m17_on_or_before": 1685,
+        "same_day_studydesc_text": 2681
+      }
+    }
+  },
+  "grid": [
+    {
+      "strategy": "strict",
+      "window_days": 365,
+      "n_index": 4222,
+      "n_final_cohort": 1664,
+      "primary_events": 357,
+      "test_allocatable_20pct": 71,
+      "clears_500": false,
+      "clears_100": false,
+      "pct_index_recovered": 0.0,
+      "black_events": 109,
+      "white_events": 212,
+      "asian_events": 8,
+      "female_events": 227,
+      "male_events": 130,
+      "age_lt65_events": 153,
+      "age_ge65_events": 204,
+      "flow": {
+        "S4": 4222,
+        "S5": 4203,
+        "S6": 3756,
+        "S7a": 3752,
+        "S8": 1807,
+        "S9": 1775,
+        "S10": 1664,
+        "S11": 1664
+      },
+      "n_final_recovered": 0
+    },
+    {
+      "strategy": "strict",
+      "window_days": 730,
+      "n_index": 4222,
+      "n_final_cohort": 1881,
+      "primary_events": 394,
+      "test_allocatable_20pct": 79,
+      "clears_500": false,
+      "clears_100": false,
+      "pct_index_recovered": 0.0,
+      "black_events": 117,
+      "white_events": 238,
+      "asian_events": 9,
+      "female_events": 251,
+      "male_events": 143,
+      "age_lt65_events": 165,
+      "age_ge65_events": 229,
+      "flow": {
+        "S4": 4222,
+        "S5": 4203,
+        "S6": 3756,
+        "S7a": 3752,
+        "S8": 2081,
+        "S9": 2044,
+        "S10": 1881,
+        "S11": 1881
+      },
+      "n_final_recovered": 0
+    },
+    {
+      "strategy": "strict",
+      "window_days": 1095,
+      "n_index": 4222,
+      "n_final_cohort": 1967,
+      "primary_events": 406,
+      "test_allocatable_20pct": 81,
+      "clears_500": false,
+      "clears_100": false,
+      "pct_index_recovered": 0.0,
+      "black_events": 122,
+      "white_events": 244,
+      "asian_events": 9,
+      "female_events": 260,
+      "male_events": 146,
+      "age_lt65_events": 169,
+      "age_ge65_events": 237,
+      "flow": {
+        "S4": 4222,
+        "S5": 4203,
+        "S6": 3756,
+        "S7a": 3752,
+        "S8": 2199,
+        "S9": 2161,
+        "S10": 1967,
+        "S11": 1967
+      },
+      "n_final_recovered": 0
+    },
+    {
+      "strategy": "strict",
+      "window_days": "lifetime",
+      "n_index": 4222,
+      "n_final_cohort": 2092,
+      "primary_events": 420,
+      "test_allocatable_20pct": 84,
+      "clears_500": false,
+      "clears_100": false,
+      "pct_index_recovered": 0.0,
+      "black_events": 127,
+      "white_events": 252,
+      "asian_events": 9,
+      "female_events": 269,
+      "male_events": 151,
+      "age_lt65_events": 173,
+      "age_ge65_events": 247,
+      "flow": {
+        "S4": 4222,
+        "S5": 4203,
+        "S6": 3756,
+        "S7a": 3752,
+        "S8": 2379,
+        "S9": 2339,
+        "S10": 2092,
+        "S11": 2092
+      },
+      "n_final_recovered": 0
+    },
+    {
+      "strategy": "recovery_any",
+      "window_days": 365,
+      "n_index": 7205,
+      "n_final_cohort": 3372,
+      "primary_events": 489,
+      "test_allocatable_20pct": 98,
+      "clears_500": false,
+      "clears_100": false,
+      "pct_index_recovered": 50.652,
+      "black_events": 144,
+      "white_events": 299,
+      "asian_events": 12,
+      "female_events": 314,
+      "male_events": 175,
+      "age_lt65_events": 212,
+      "age_ge65_events": 277,
+      "flow": {
+        "S4": 7205,
+        "S5": 7112,
+        "S6": 6393,
+        "S7a": 6381,
+        "S8": 3583,
+        "S9": 3547,
+        "S10": 3372,
+        "S11": 3372
+      },
+      "n_final_recovered": 1708
+    },
+    {
+      "strategy": "recovery_any",
+      "window_days": 730,
+      "n_index": 7205,
+      "n_final_cohort": 3709,
+      "primary_events": 533,
+      "test_allocatable_20pct": 107,
+      "clears_500": true,
+      "clears_100": true,
+      "pct_index_recovered": 49.286,
+      "black_events": 156,
+      "white_events": 328,
+      "asian_events": 13,
+      "female_events": 342,
+      "male_events": 191,
+      "age_lt65_events": 228,
+      "age_ge65_events": 305,
+      "flow": {
+        "S4": 7205,
+        "S5": 7112,
+        "S6": 6393,
+        "S7a": 6381,
+        "S8": 3981,
+        "S9": 3940,
+        "S10": 3709,
+        "S11": 3709
+      },
+      "n_final_recovered": 1828
+    },
+    {
+      "strategy": "recovery_any",
+      "window_days": 1095,
+      "n_index": 7205,
+      "n_final_cohort": 3842,
+      "primary_events": 547,
+      "test_allocatable_20pct": 109,
+      "clears_500": true,
+      "clears_100": true,
+      "pct_index_recovered": 48.803,
+      "black_events": 161,
+      "white_events": 335,
+      "asian_events": 14,
+      "female_events": 353,
+      "male_events": 194,
+      "age_lt65_events": 232,
+      "age_ge65_events": 315,
+      "flow": {
+        "S4": 7205,
+        "S5": 7112,
+        "S6": 6393,
+        "S7a": 6381,
+        "S8": 4148,
+        "S9": 4106,
+        "S10": 3842,
+        "S11": 3842
+      },
+      "n_final_recovered": 1875
+    },
+    {
+      "strategy": "recovery_any",
+      "window_days": "lifetime",
+      "n_index": 7205,
+      "n_final_cohort": 4044,
+      "primary_events": 564,
+      "test_allocatable_20pct": 113,
+      "clears_500": true,
+      "clears_100": true,
+      "pct_index_recovered": 48.269,
+      "black_events": 166,
+      "white_events": 346,
+      "asian_events": 14,
+      "female_events": 363,
+      "male_events": 201,
+      "age_lt65_events": 237,
+      "age_ge65_events": 327,
+      "flow": {
+        "S4": 7205,
+        "S5": 7112,
+        "S6": 6393,
+        "S7a": 6381,
+        "S8": 4407,
+        "S9": 4363,
+        "S10": 4044,
+        "S11": 4044
+      },
+      "n_final_recovered": 1952
+    },
+    {
+      "strategy": "recovery_confirmed",
+      "window_days": 365,
+      "n_index": 6903,
+      "n_final_cohort": 3216,
+      "primary_events": 473,
+      "test_allocatable_20pct": 95,
+      "clears_500": false,
+      "clears_100": false,
+      "pct_index_recovered": 48.259,
+      "black_events": 141,
+      "white_events": 287,
+      "asian_events": 12,
+      "female_events": 302,
+      "male_events": 171,
+      "age_lt65_events": 207,
+      "age_ge65_events": 266,
+      "flow": {
+        "S4": 6903,
+        "S5": 6815,
+        "S6": 6141,
+        "S7a": 6131,
+        "S8": 3406,
+        "S9": 3371,
+        "S10": 3216,
+        "S11": 3216
+      },
+      "n_final_recovered": 1552
+    },
+    {
+      "strategy": "recovery_confirmed",
+      "window_days": 730,
+      "n_index": 6903,
+      "n_final_cohort": 3541,
+      "primary_events": 517,
+      "test_allocatable_20pct": 103,
+      "clears_500": true,
+      "clears_100": true,
+      "pct_index_recovered": 46.879,
+      "black_events": 153,
+      "white_events": 316,
+      "asian_events": 13,
+      "female_events": 330,
+      "male_events": 187,
+      "age_lt65_events": 223,
+      "age_ge65_events": 294,
+      "flow": {
+        "S4": 6903,
+        "S5": 6815,
+        "S6": 6141,
+        "S7a": 6131,
+        "S8": 3790,
+        "S9": 3750,
+        "S10": 3541,
+        "S11": 3541
+      },
+      "n_final_recovered": 1660
+    },
+    {
+      "strategy": "recovery_confirmed",
+      "window_days": 1095,
+      "n_index": 6903,
+      "n_final_cohort": 3670,
+      "primary_events": 531,
+      "test_allocatable_20pct": 106,
+      "clears_500": true,
+      "clears_100": true,
+      "pct_index_recovered": 46.403,
+      "black_events": 158,
+      "white_events": 323,
+      "asian_events": 14,
+      "female_events": 341,
+      "male_events": 190,
+      "age_lt65_events": 227,
+      "age_ge65_events": 304,
+      "flow": {
+        "S4": 6903,
+        "S5": 6815,
+        "S6": 6141,
+        "S7a": 6131,
+        "S8": 3951,
+        "S9": 3910,
+        "S10": 3670,
+        "S11": 3670
+      },
+      "n_final_recovered": 1703
+    },
+    {
+      "strategy": "recovery_confirmed",
+      "window_days": "lifetime",
+      "n_index": 6903,
+      "n_final_cohort": 3866,
+      "primary_events": 547,
+      "test_allocatable_20pct": 109,
+      "clears_500": true,
+      "clears_100": true,
+      "pct_index_recovered": 45.887,
+      "black_events": 163,
+      "white_events": 333,
+      "asian_events": 14,
+      "female_events": 351,
+      "male_events": 196,
+      "age_lt65_events": 231,
+      "age_ge65_events": 316,
+      "flow": {
+        "S4": 6903,
+        "S5": 6815,
+        "S6": 6141,
+        "S7a": 6131,
+        "S8": 4202,
+        "S9": 4159,
+        "S10": 3866,
+        "S11": 3866
+      },
+      "n_final_recovered": 1774
+    }
+  ],
+  "cells_clearing_floor": [
+    {
+      "strategy": "recovery_any",
+      "window_days": 730,
+      "primary_events": 533,
+      "test_allocatable_20pct": 107,
+      "pct_index_recovered": 49.286
+    },
+    {
+      "strategy": "recovery_any",
+      "window_days": 1095,
+      "primary_events": 547,
+      "test_allocatable_20pct": 109,
+      "pct_index_recovered": 48.803
+    },
+    {
+      "strategy": "recovery_any",
+      "window_days": "lifetime",
+      "primary_events": 564,
+      "test_allocatable_20pct": 113,
+      "pct_index_recovered": 48.269
+    },
+    {
+      "strategy": "recovery_confirmed",
+      "window_days": 730,
+      "primary_events": 517,
+      "test_allocatable_20pct": 103,
+      "pct_index_recovered": 46.879
+    },
+    {
+      "strategy": "recovery_confirmed",
+      "window_days": 1095,
+      "primary_events": 531,
+      "test_allocatable_20pct": 106,
+      "pct_index_recovered": 46.403
+    },
+    {
+      "strategy": "recovery_confirmed",
+      "window_days": "lifetime",
+      "primary_events": 547,
+      "test_allocatable_20pct": 109,
+      "pct_index_recovered": 45.887
+    }
+  ],
+  "validation": {
+    "strict_365_n_final": 1664,
+    "strict_365_primary_events": 357,
+    "strict_365_regression_pass": true,
+    "strict_365_flow": [
+      4222,
+      4203,
+      3756,
+      3752,
+      1807,
+      1775,
+      1664,
+      1664
+    ],
+    "concordant_single_side_matches_2983": true
+  }
+}

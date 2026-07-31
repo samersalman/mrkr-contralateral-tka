@@ -1,0 +1,14 @@
+label,step,description,n_strict,n_permissive
+PRELIMINARY,S0,total demographics patients,83011,83011
+PRELIMINARY,S1,with >=1 knee radiograph (image rows -> patients),83011,83011
+PRELIMINARY,S2,with >=1 CPT 27447,8525,8525
+PRELIMINARY,S3,with >=1 single-side (laterality-coded) 27447,4730,4730
+PRELIMINARY,S4,"provisional index (strict: earliest 27447 single-side; permissive: earliest single-side 27447, no prior-arthroplasty evidence)",4222,3740
+PRELIMINARY,S5,+ age >= 40 at index,4203,3721
+PRELIMINARY,S6,- prior contralateral arthroplasty (pre-index contra CPT or contra/B image prosthesis),3756,3721
+PRELIMINARY,S7a,- infection high_specificity (MAX knee_osteomyelitis in 365d pre-index) [carried forward],3752,3717
+PRELIMINARY,S7b,"- infection sensitivity (MAX osteo OR joint_infection in 365d pre-index) [alternative, NOT carried]",3749,3714
+PRELIMINARY,S8,with >=1 eligible pre-index contralateral image in 1-365d (contra laterality OR B-frontal),1807,1806
+PRELIMINARY,S9,- contralateral 27447 within day 0-90,1775,1775
+PRELIMINARY,S10,observed through day 90 (last_observation across cpt/icd/pain/image > index+90),1664,1662
+PRELIMINARY,S11,provisional final landmark cohort,1664,1662

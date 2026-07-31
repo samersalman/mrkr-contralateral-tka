@@ -1,0 +1,12 @@
+metric,value
+n_sampled,200
+min_required,200
+cohort_pool,3709
+cohort_events,533
+n_events_sampled,100
+n_nonevents_sampled,100
+by_side_source,"{'coded': 120, 'recovered': 80}"
+by_split,"{'train': 144, 'test': 41, 'val': 15}"
+n_with_cpt_rows,200
+n_cpt_rows_total,556
+note,patient-level workbook is git-ignored at derived-data/cohort/outcome_audit_workbook.csv

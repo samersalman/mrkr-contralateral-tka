@@ -1,0 +1,7 @@
+label,metric,n_patients,n_patients_age40plus
+PRELIMINARY,n_patients_with_27447,8525,8417
+PRELIMINARY,n_with_any_single_side_27447,4730,4708
+PRELIMINARY,n_strict,4222,4203
+PRELIMINARY,n_with_earlier_unsided_before_first_sided,508,505
+PRELIMINARY,n_permissive,3740,3721
+PRELIMINARY,delta_permissive_minus_strict,-482,-482

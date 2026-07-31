@@ -1,0 +1,21 @@
+protocol_concept,dataset_columns,source_table,transformation,confidence,supporting_dictionary_definition,unresolved_concern
+Patient id,empi_anon,all,linkage key (VARCHAR),High,n/a,none
+Index TKA,cpt_code = '27447',cpt,filter to total knee arthroplasty,High,"CPT dict: 'Arthroplasty, knee, condyle and plateau; medial AND lateral compartments with or without patella resurfacing (total knee arthroplasty)'",none
+TKA side,cpt_group_modifier,cpt,parse RT/LT/50/multi-token,High parse / CRITICAL,n/a,"61% of 27447 records (8,613/14,076) have a blank modifier - caps index and events"
+Procedure/ICD/pain date,date_anon,cpt / icd / pain,DATE %Y-%m-%d,High,n/a,de-identified; only within-patient intervals are valid
+Age at index,age_at_procedure,cpt,"numeric, restrict >= 40 at index",High,n/a,none
+Study/series/instance UID,StudyInstanceUID_anon / SeriesInstanceUID_anon / SOPInstanceUID_anon,image,group images into studies,High,n/a,none
+Image side,laterality (R/L/B/-1),image,map; -1 = unknown; B = bilateral (contains contralateral),High,n/a,-1 (n=682) excluded; model-inferred
+View,view_position (F/L/S/I/E),image,"F=frontal, L=lateral, S=sunrise, I/E=other",High,n/a,exact meaning of I/E uncertain; model-inferred
+Weight-bearing,weight_bearing (0/1),image,boolean,High,n/a,model-inferred (F1 ~0.981)
+Arthroplasty on image,arthroplasty (0/R/L/B/NL),image,prosthesis laterality; exclusion / QA,High,n/a,model-inferred (F1 ~0.992); NL = non-localized (n=29)
+Inferred KLG,L_KLG_inference / R_KLG_inference,image,secondary comparator only,Medium,n/a,"~82% NULL; inferred only on WB bilateral frontal, non-arthroplasty views"
+Image date,StudyDate_anon,image,DATE %Y-%m-%d,High,n/a,de-identified
+Image path,dicom_path,image,transfer manifest only (no pixels opened),High,n/a,none
+Infection / osteomyelitis,knee_osteomyelitis; joint_infection,icd,curated flags; MAX per patient within 365d pre-index; report both defs,Medium,"dataset paper (curated); ICD-10 M86.05x/M86.06x (osteomyelitis, femur / tibia-fibula) corroborate knee-region",joint_infection is not knee-specific; flags are per-line
+Comorbidities,obesity; autoimmune; diabetes; hypertension; nicotine_use; trauma_lower_extremity; knee_osteoarthritis,icd,curated 0/1 flags; MAX per patient,High,n/a,per-line aggregation (MAX GROUP BY empi_anon) required
+Pain,pain_score; knee_pain; laterality; pain_location,pain,numeric / flags (raw VARCHAR),Medium (sparse),n/a,laterality ~95% NULL; secondary predictor
+Demographics,sex; race; ethnicity,demographics,categorical,High,n/a,"race 'Unknown' n=8,751 (report as explicit stratum)"
+Last-observation date,max(date across cpt/icd/pain) and image StudyDate_anon,all,per-patient max observed date,High,n/a,death unavailable (competing risk of mortality cannot be modeled)
+Prior contralateral arthroplasty,prior laterality-coded knee CPT (27447/27446/27445/27442/27440/27438/27486/27487/27488) + pre-index image arthroplasty,cpt + image,pre-index detection,Medium,CPT dict (all listed codes present),27446 (unicompartmental) laterality completeness uncertain
+ICD side-recovery signal,ICD10 M17.11/M17.31 (right); M17.12/M17.32 (left),icd,5th-digit laterality,Medium,"ICD dict: M17.11 'Unilateral primary osteoarthritis, right knee' (etc.)",signal only; confined to labeled permissive arm; never applied post-index

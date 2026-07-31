@@ -1,0 +1,32 @@
+# MRKR Contralateral TKA — Phase 1 feasibility pipeline
+# Pinned to versions verified in the active environment (Python 3.14.0).
+# See README.md for the interpreter note (pyenv 3.12.8 lacks these packages).
+duckdb==1.4.4
+pandas==2.3.3
+pyarrow==23.0.0
+lifelines==0.30.3
+python-docx==1.2.0
+matplotlib==3.10.8
+PyYAML==6.0.3
+numpy==2.4.2
+scipy==1.17.0
+scikit-learn==1.9.0
+patsy==1.0.2
+# Phase 2: DICOM decode + image preprocessing (torch-free; torch/timm live in Colab only)
+pydicom==3.0.2
+Pillow==12.1.0
+# REQUIRED for MRKR pixel data. Verified 2026-07-25 against the real transfer: every MRKR
+# DICOM is "JPEG Lossless, Non-Hierarchical, First-Order Prediction (Process 14 [SV1])"
+# (transfer syntax 1.2.840.10008.1.2.4.70), which pydicom CANNOT decode on its own —
+# `.pixel_array` raises RuntimeError listing gdcm/pylibjpeg as missing. Either package below
+# resolves it; both are pinned because src/preprocess_images.py is useless without one.
+# Sample decoded: 3610x4400, MONOCHROME2, 12-bit (0-4095).
+python-gdcm==3.2.6
+pylibjpeg==2.1.0
+pylibjpeg-libjpeg==2.4.0
+# Phase 2: bulk image transfer from Nightingale
+globus-cli==3.42.0
+# Notebook authoring / validation (notebooks execute in Colab, not here)
+nbformat==5.10.4
+# Testing
+pytest>=8.0

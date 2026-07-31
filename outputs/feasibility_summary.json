@@ -1,0 +1,277 @@
+{
+  "label": "PRELIMINARY feasibility (LOCKED extraction)",
+  "study": "MRKR Contralateral TKA - Multi-view radiographic prediction",
+  "primary_definition": {
+    "cohort_strategy": "recovery_any",
+    "pre_index_window_days": [
+      1,
+      730
+    ],
+    "requires_laterality_qa_audit": true
+  },
+  "cohort": {
+    "n_final_landmark_cohort": 3709,
+    "primary_events_5y": 533,
+    "primary_event_pct": 14.37,
+    "test_allocatable_20pct": 107,
+    "median_followup_days_from_landmark": 831.0,
+    "pct_index_side_recovered": 49.3
+  },
+  "floors": {
+    "primary_events_floor": 500,
+    "test_allocatable_floor": 100,
+    "primary_events_meets_floor": true,
+    "test_allocatable_meets_floor": true,
+    "both_floors_met": true
+  },
+  "cohort_flow": [
+    {
+      "step": 1,
+      "description": "Total patients in demographics",
+      "n_primary": 83011,
+      "n_excluded_primary": 0,
+      "n_strict": 83011,
+      "n_excluded_strict": 0
+    },
+    {
+      "step": 2,
+      "description": "Patients with any knee radiograph",
+      "n_primary": 83011,
+      "n_excluded_primary": 0,
+      "n_strict": 83011,
+      "n_excluded_strict": 0
+    },
+    {
+      "step": 3,
+      "description": "Patients with CPT 27447",
+      "n_primary": 8525,
+      "n_excluded_primary": 74486,
+      "n_strict": 8525,
+      "n_excluded_strict": 74486
+    },
+    {
+      "step": 4,
+      "description": "Aged >=40 at index",
+      "n_primary": 8417,
+      "n_excluded_primary": 108,
+      "n_strict": 8417,
+      "n_excluded_strict": 108
+    },
+    {
+      "step": 5,
+      "description": "With exactly one interpretable index side (primary: coded or recovered single side; strict: coded only)",
+      "n_primary": 7112,
+      "n_excluded_primary": 1305,
+      "n_strict": 4203,
+      "n_excluded_strict": 4214
+    },
+    {
+      "step": 6,
+      "description": "Without prior contralateral arthroplasty",
+      "n_primary": 6393,
+      "n_excluded_primary": 719,
+      "n_strict": 3756,
+      "n_excluded_strict": 447
+    },
+    {
+      "step": 7,
+      "description": "Without protocol infection/osteomyelitis exclusion (high-specificity)",
+      "n_primary": 6381,
+      "n_excluded_primary": 12,
+      "n_strict": 3752,
+      "n_excluded_strict": 4
+    },
+    {
+      "step": 8,
+      "description": "With an eligible pre-index contralateral study (primary window 730d; strict 365d)",
+      "n_primary": 3981,
+      "n_excluded_primary": 2400,
+      "n_strict": 1807,
+      "n_excluded_strict": 1945
+    },
+    {
+      "step": 9,
+      "description": "Without contralateral CPT 27447 through day 90",
+      "n_primary": 3940,
+      "n_excluded_primary": 41,
+      "n_strict": 1775,
+      "n_excluded_strict": 32
+    },
+    {
+      "step": 10,
+      "description": "Observed through day 90",
+      "n_primary": 3709,
+      "n_excluded_primary": 231,
+      "n_strict": 1664,
+      "n_excluded_strict": 111
+    },
+    {
+      "step": 11,
+      "description": "Final primary landmark cohort",
+      "n_primary": 3709,
+      "n_excluded_primary": 0,
+      "n_strict": 1664,
+      "n_excluded_strict": 0
+    }
+  ],
+  "subgroups": [
+    {
+      "subgroup_family": "sex",
+      "subgroup": "Female",
+      "n_patients": 2323,
+      "n_events": 342,
+      "event_pct": 14.72,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "sex",
+      "subgroup": "Male",
+      "n_patients": 1386,
+      "n_events": 191,
+      "event_pct": 13.78,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "age_at_index",
+      "subgroup": "<65",
+      "n_patients": 1554,
+      "n_events": 228,
+      "event_pct": 14.67,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "age_at_index",
+      "subgroup": ">=65",
+      "n_patients": 2155,
+      "n_events": 305,
+      "event_pct": 14.15,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "race",
+      "subgroup": "Black",
+      "n_patients": 1247,
+      "n_events": 156,
+      "event_pct": 12.51,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "race",
+      "subgroup": "White",
+      "n_patients": 2129,
+      "n_events": 328,
+      "event_pct": 15.41,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "race",
+      "subgroup": "Asian",
+      "n_patients": 121,
+      "n_events": 13,
+      "event_pct": 10.74,
+      "stability_flag": "<50"
+    },
+    {
+      "subgroup_family": "obesity",
+      "subgroup": "yes",
+      "n_patients": 2103,
+      "n_events": 351,
+      "event_pct": 16.69,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "obesity",
+      "subgroup": "no",
+      "n_patients": 1606,
+      "n_events": 182,
+      "event_pct": 11.33,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "imaging_weight_bearing",
+      "subgroup": "WB",
+      "n_patients": 3337,
+      "n_events": 493,
+      "event_pct": 14.77,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "imaging_weight_bearing",
+      "subgroup": "non-WB",
+      "n_patients": 372,
+      "n_events": 40,
+      "event_pct": 10.75,
+      "stability_flag": "<50"
+    },
+    {
+      "subgroup_family": "imaging_views",
+      "subgroup": "frontal-only",
+      "n_patients": 2048,
+      "n_events": 169,
+      "event_pct": 8.25,
+      "stability_flag": ">=100"
+    },
+    {
+      "subgroup_family": "imaging_views",
+      "subgroup": "multi-view",
+      "n_patients": 1661,
+      "n_events": 364,
+      "event_pct": 21.91,
+      "stability_flag": ">=100"
+    }
+  ],
+  "imaging_manifest": {
+    "n_unique_patients": 3709,
+    "n_unique_studies": 3709,
+    "n_unique_image_files": 6122,
+    "n_unique_paths": 6122,
+    "pct_paths_missing_or_malformed": 0.0,
+    "est_transfer_size": "N/A: file sizes unavailable in metadata"
+  },
+  "decision_anchors": {
+    "label": "PRELIMINARY",
+    "note": "Five decision-critical quantities re-derived from the same strict-cohort in-memory structures (df447/per/S/stepsS). Aggregates only; no cohort computation or existing value was changed.",
+    "ceiling_exact_token": 699,
+    "ceiling_parse_modifier": 701,
+    "pregate_contra_5y_events_strict_age40": 618,
+    "same_day_companion_strict": 2604,
+    "same_day_companion_strict_exact_token": 2597,
+    "any_preindex_radiograph_1yr_n": 2369,
+    "any_preindex_radiograph_1yr_pct": 56.365,
+    "contralateral_eligible_1yr_pct": 42.993,
+    "imaging_window_sensitivity_lever1": [
+      {
+        "window_days": "365",
+        "n_with_contralateral_image": 2117,
+        "pct_increase_over_365": 0.0
+      },
+      {
+        "window_days": "730",
+        "n_with_contralateral_image": 2444,
+        "pct_increase_over_365": 15.446
+      },
+      {
+        "window_days": "1095",
+        "n_with_contralateral_image": 2594,
+        "pct_increase_over_365": 22.532
+      },
+      {
+        "window_days": "lifetime",
+        "n_with_contralateral_image": 2827,
+        "pct_increase_over_365": 33.538
+      }
+    ],
+    "_definitions": {
+      "ceiling_exact_token": "distinct 27447 patients with >=1 exact-token RT (single_rt) AND >=1 exact-token LT (single_lt) record, any interval",
+      "ceiling_parse_modifier": "distinct 27447 patients with >=1 parse_modifier single-side R AND >=1 single-side L record (includes multi_single_side e.g. 'RT XP'), any interval",
+      "pregate_contra_5y_events_strict_age40": "STRICT age>=40 index patients (S5=4203) with a contralateral laterality-coded 27447 in (90,1826] days from index, BEFORE the S6-S10 gates",
+      "same_day_companion_strict": "STRICT index patients (S4=4222) whose earliest 27447 date has exactly one parse_modifier single-side (RT xor LT) record PLUS >=1 same-day blank/NULL-modifier 27447 companion line (module-native single-side definition; definitive)",
+      "same_day_companion_strict_exact_token": "as same_day_companion_strict but counting only exact-token single_rt/single_lt as the single-side record; the 2604-vs-2597 gap is multi_single_side ('RT XP'-type) earliest lines (resolves the 2604-vs-2597 memo discrepancy)",
+      "any_preindex_radiograph_1yr_n": "STRICT age>=40 index patients (S5=4203) with ANY image (any laterality/view) with StudyDate in [index-365, index-1]",
+      "any_preindex_radiograph_1yr_pct": "any_preindex_radiograph_1yr_n / S5",
+      "contralateral_eligible_1yr_pct": "S8/S5 = 1807/4203: contralateral-specific eligible pre-index image rate (contra laterality OR B-frontal, 1-365d), for contrast with the any-radiograph rate",
+      "imaging_window_sensitivity_lever1": "STRICT age>=40 (S5=4203) with >=1 eligible contralateral pre-index image (contra laterality OR B-frontal) per widening pre-index window; pct_increase_over_365 vs the 1-365d count; also written to stage1_imaging_window_sensitivity.csv"
+    }
+  },
+  "recommendation": "PROCEED to formal Riley sample-size + test-precision calculation, OSF preregistration, and image transfer, CONTINGENT on the protocol section-7 >=200-patient laterality QA audit validating the recovered index sides (~49% of the primary cohort). Retain the strict coded-laterality cohort as the high-specificity sensitivity analysis."
+}

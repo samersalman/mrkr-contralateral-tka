@@ -1,0 +1,6 @@
+label,signal,n_present,n_points_to_single_side,pct_of_blank_pop
+PRELIMINARY,blank_index_population,4300,4300,100.0
+PRELIMINARY,same_day_image_laterality,3370,3236,78.372
+PRELIMINARY,icd_m17_laterality_on_or_before,2630,1984,61.163
+PRELIMINARY,same_day_studydesc_text,3333,3272,77.512
+PRELIMINARY,any_signal_present,3744,2983,87.07

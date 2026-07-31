@@ -1,0 +1,21 @@
+label,view,key,side,quality_flag,n_records,n_patients,pct_records,n_tokens,is_multitoken,is_blank
+PRELIMINARY,parsed,,U,missing,8613,6952,61.189,-1,-1,-1
+PRELIMINARY,parsed,,R,single_rt,2799,2786,19.885,-1,-1,-1
+PRELIMINARY,parsed,,L,single_lt,2641,2637,18.762,-1,-1,-1
+PRELIMINARY,parsed,,B,bilateral_50,11,11,0.078,-1,-1,-1
+PRELIMINARY,parsed,,L,multi_single_side,7,7,0.05,-1,-1,-1
+PRELIMINARY,parsed,,R,multi_single_side,4,4,0.028,-1,-1,-1
+PRELIMINARY,parsed,,U,uninterpretable,1,1,0.007,-1,-1,-1
+PRELIMINARY,raw,<NULL>,,,8613,6952,61.189,0,0,1
+PRELIMINARY,raw,RT,,,2799,2786,19.885,1,0,0
+PRELIMINARY,raw,LT,,,2641,2637,18.762,1,0,0
+PRELIMINARY,raw,50,,,11,11,0.078,1,0,0
+PRELIMINARY,raw,RT XP,,,3,3,0.021,2,1,0
+PRELIMINARY,raw,74 LT,,,2,2,0.014,2,1,0
+PRELIMINARY,raw,22,,,1,1,0.007,1,0,0
+PRELIMINARY,raw,22 LT,,,1,1,0.007,2,1,0
+PRELIMINARY,raw,59 RT,,,1,1,0.007,2,1,0
+PRELIMINARY,raw,73 LT,,,1,1,0.007,2,1,0
+PRELIMINARY,raw,LT XE,,,1,1,0.007,2,1,0
+PRELIMINARY,raw,LT XP,,,1,1,0.007,2,1,0
+PRELIMINARY,raw,LT XU,,,1,1,0.007,2,1,0

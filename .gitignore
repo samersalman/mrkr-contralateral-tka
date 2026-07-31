@@ -1,0 +1,28 @@
+# Patient-level data. Never commit any of this.
+metadata-files/
+derived-data/
+DICOMs/
+*.parquet
+*.npz
+*.dcm
+*.tar.gz
+
+# Manuscript documents and anything that writes them.
+*.docx
+src/make_manuscript.py
+
+# Patient-level artefacts that can reappear under otherwise-public directories.
+outputs/tables/image_transfer_manifest.csv
+outputs/tables/image_transfer_manifest_paths.txt
+outputs/tables/selected_studies.csv
+outputs/figures/crop_qa_contact_sheet.png
+outputs/logs/run.log
+outputs/manuscript/
+
+# Local noise.
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/

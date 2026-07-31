@@ -1,0 +1,14 @@
+subgroup_family,subgroup,n_patients,n_events,event_pct,stability_flag
+sex,Female,2323,342,14.72,>=100
+sex,Male,1386,191,13.78,>=100
+age_at_index,<65,1554,228,14.67,>=100
+age_at_index,>=65,2155,305,14.15,>=100
+race,Black,1247,156,12.51,>=100
+race,White,2129,328,15.41,>=100
+race,Asian,121,13,10.74,<50
+obesity,yes,2103,351,16.69,>=100
+obesity,no,1606,182,11.33,>=100
+imaging_weight_bearing,WB,3337,493,14.77,>=100
+imaging_weight_bearing,non-WB,372,40,10.75,<50
+imaging_views,frontal-only,2048,169,8.25,>=100
+imaging_views,multi-view,1661,364,21.91,>=100

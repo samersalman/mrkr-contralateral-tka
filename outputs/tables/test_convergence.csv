@@ -1,0 +1,8 @@
+arm,n_seeds,train_nll_drop,val_overfit_gap,status,reason
+m0d_clinical,5,0.051225,0.021139,ok,
+m1_klg,5,0.079581,0.034069,ok,
+m2_frontal,5,0.238495,0.156591,severe_overfit,"validation NLL ends 0.157 above its own minimum over 5 seeds (ceiling 0.1); the checkpoint is selected on the same validation split it is then scored on, so its metrics are optimistic"
+m3_image,5,0.262377,0.360103,severe_overfit,"validation NLL ends 0.360 above its own minimum over 5 seeds (ceiling 0.1); the checkpoint is selected on the same validation split it is then scored on, so its metrics are optimistic"
+m4_frontal,5,0.234555,0.187852,severe_overfit,"validation NLL ends 0.188 above its own minimum over 5 seeds (ceiling 0.1); the checkpoint is selected on the same validation split it is then scored on, so its metrics are optimistic"
+m4_fusion,5,0.281268,0.181838,severe_overfit,"validation NLL ends 0.182 above its own minimum over 5 seeds (ceiling 0.1); the checkpoint is selected on the same validation split it is then scored on, so its metrics are optimistic"
+r1_densenet_frontal,5,0.001051,0.019193,ok,

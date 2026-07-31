@@ -1,0 +1,14 @@
+subgroup,level,n_patients,n_events,metric,horizon_days,estimate,ci_lo,ci_hi,suppressed,suppression_reason
+Sex,Female,233,35,auc,1825,,,,True,protocol section 21: fewer than 50 events (35 in this level)
+Sex,Male,138,19,auc,1825,,,,True,protocol section 21: fewer than 50 events (19 in this level)
+Age group,Under 65 years,158,26,auc,1825,,,,True,protocol section 21: fewer than 50 events (26 in this level)
+Age group,65 years or older,213,28,auc,1825,,,,True,protocol section 21: fewer than 50 events (28 in this level)
+Race group,Black,125,16,auc,1825,,,,True,protocol section 21: fewer than 50 events (16 in this level)
+Race group,White,213,33,auc,1825,,,,True,protocol section 21: fewer than 50 events (33 in this level)
+Race group,Asian,12,1,auc,1825,,,,True,protocol section 21: fewer than 50 events (1 in this level)
+Obesity,Yes,112,18,auc,1825,,,,True,protocol section 21: fewer than 50 events (18 in this level)
+Obesity,No,259,36,auc,1825,,,,True,protocol section 21: fewer than 50 events (36 in this level)
+Frontal radiograph technique,Weight bearing,339,50,auc,1825,0.852511,0.772624,0.922074,False,
+Frontal radiograph technique,Non weight bearing,32,4,auc,1825,,,,True,protocol section 21: fewer than 50 events (4 in this level)
+Imaging views,Frontal only,202,19,auc,1825,,,,True,protocol section 21: fewer than 50 events (19 in this level)
+Imaging views,Multiple views,169,35,auc,1825,,,,True,protocol section 21: fewer than 50 events (35 in this level)

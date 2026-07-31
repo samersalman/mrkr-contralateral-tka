@@ -1,0 +1,10 @@
+label,definition,window,n_events,n_cohort,pct
+PRELIMINARY,primary_strict_contralateral,day91_to_5y,357,1664,21.454
+PRELIMINARY,upper_bound_any_modifier,day91_to_5y,381,1664,22.897
+PRELIMINARY,blank_modifier_capture_gap,day91_to_5y,24,1664,1.442
+PRELIMINARY,secondary_strict_from_day1,1..365d,247,1664,14.844
+PRELIMINARY,secondary_strict_from_day1,1..730d,309,1664,18.57
+PRELIMINARY,secondary_strict_from_day1,1..1826d,357,1664,21.454
+PRELIMINARY,secondary_strict_from_day91,91..365d,247,1664,14.844
+PRELIMINARY,secondary_strict_from_day91,91..730d,309,1664,18.57
+PRELIMINARY,secondary_strict_from_day91,91..1826d,357,1664,21.454

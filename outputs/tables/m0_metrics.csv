@@ -1,0 +1,108 @@
+model,scope,subgroup,metric,horizon_years,horizon_days,n,n_events,estimate,ci_lo,ci_hi,suppressed,note
+M0_primary,overall,,harrell_cindex,,,371.0,54.0,0.6007644197359278,0.5259350186722335,0.6763720242471565,False,interpret via CI: 54 events < 100
+M0_primary,overall,,harrell_cindex_train_apparent,,,2597.0,373.0,0.6142748747029811,,,False,"apparent (in-sample) discrimination, for the optimism gap only"
+M0_primary,overall,,ipcw_cd_auroc,1.0,365.0,371.0,34.0,0.6337875529986747,0.5397013498233691,0.729277482952227,False,interpret via CI: 54 events < 100
+M0_primary,overall,,calibration_slope,1.0,365.0,371.0,34.0,1.0167225225547625,0.3232747101771885,1.8734634770367382,False,interpret via CI: 54 events < 100
+M0_primary,overall,,calibration_intercept_cloglog,1.0,365.0,371.0,34.0,0.04653180098672851,-0.3447346734772912,0.35088809699597007,False,interpret via CI: 54 events < 100
+M0_primary,overall,,mean_predicted_risk,1.0,365.0,371.0,34.0,0.10052789622235322,0.0964830849718504,0.10513986981080392,False,interpret via CI: 54 events < 100
+M0_primary,overall,,km_observed_risk,1.0,365.0,371.0,34.0,0.10414292401239011,0.07227566037023112,0.13724770953924598,False,interpret via CI: 54 events < 100
+M0_primary,overall,,calibration_in_the_large_risk_diff,1.0,365.0,371.0,34.0,0.00361502779003689,-0.028095196565104074,0.0372229181295335,False,interpret via CI: 54 events < 100
+M0_primary,overall,,ipcw_cd_auroc_G_from_val,1.0,365.0,371.0,34.0,0.6336032987357868,,,False,robustness: censoring curve estimated on val instead of train
+M0_primary,overall,,ipcw_cd_auroc,2.0,730.0,371.0,46.0,0.6171922159203449,0.5357131017556608,0.7056030050675977,False,interpret via CI: 54 events < 100
+M0_primary,overall,,calibration_slope,2.0,730.0,371.0,46.0,0.8161978952459006,0.29986239066338555,1.491189597733938,False,interpret via CI: 54 events < 100
+M0_primary,overall,,calibration_intercept_cloglog,2.0,730.0,371.0,46.0,0.09860961599800327,-0.235878067521809,0.40524719934135944,False,interpret via CI: 54 events < 100
+M0_primary,overall,,mean_predicted_risk,2.0,730.0,371.0,46.0,0.14019202685129056,0.1347101872655685,0.1464848992445013,False,interpret via CI: 54 events < 100
+M0_primary,overall,,km_observed_risk,2.0,730.0,371.0,46.0,0.15218226729249074,0.11421809944856984,0.19811757723975085,False,interpret via CI: 54 events < 100
+M0_primary,overall,,calibration_in_the_large_risk_diff,2.0,730.0,371.0,46.0,0.011990240441200173,-0.026210120171172142,0.056532152689295054,False,interpret via CI: 54 events < 100
+M0_primary,overall,,ipcw_cd_auroc_G_from_val,2.0,730.0,371.0,46.0,0.6169813879985587,,,False,robustness: censoring curve estimated on val instead of train
+M0_primary,overall,,ipcw_cd_auroc,5.0,1825.0,371.0,54.0,0.6980078172295499,0.6114233027658358,0.7819216816657518,False,interpret via CI: 54 events < 100; horizon clamped from day 1826: administrative censoring at day 1826 leaves no controls at the nominal horizon
+M0_primary,overall,,calibration_slope,5.0,1825.0,371.0,54.0,1.4568733553707671,0.8528587463489495,2.3012376299991715,False,interpret via CI: 54 events < 100; horizon clamped from day 1826: administrative censoring at day 1826 leaves no controls at the nominal horizon
+M0_primary,overall,,calibration_intercept_cloglog,5.0,1825.0,371.0,54.0,0.04818630903740717,-0.3143742176618412,0.3571542145068503,False,interpret via CI: 54 events < 100; horizon clamped from day 1826: administrative censoring at day 1826 leaves no controls at the nominal horizon
+M0_primary,overall,,mean_predicted_risk,5.0,1825.0,371.0,54.0,0.20998857212933844,0.2022083795404734,0.21890271652353646,False,interpret via CI: 54 events < 100; horizon clamped from day 1826: administrative censoring at day 1826 leaves no controls at the nominal horizon
+M0_primary,overall,,km_observed_risk,5.0,1825.0,371.0,54.0,0.1995641722939382,0.1500462409127091,0.2566815906116594,False,interpret via CI: 54 events < 100; horizon clamped from day 1826: administrative censoring at day 1826 leaves no controls at the nominal horizon
+M0_primary,overall,,calibration_in_the_large_risk_diff,5.0,1825.0,371.0,54.0,-0.01042439983540025,-0.06112303070079543,0.04452761512320424,False,interpret via CI: 54 events < 100; horizon clamped from day 1826: administrative censoring at day 1826 leaves no controls at the nominal horizon
+M0_primary,overall,,ipcw_cd_auroc_G_from_val,5.0,1825.0,371.0,54.0,0.6982059207597813,,,False,robustness: censoring curve estimated on val instead of train
+M0_primary,overall,,ipcw_cd_auroc_paired_diff_5y_minus_2y,,,371.0,54.0,0.08081560130920495,0.011713637663894733,0.1588443184707425,False,"PAIRED patient-level bootstrap (protocol section 18): day 1825 minus day 730, both evaluated on the same resampled patients within each replicate; P(diff <= 0) = 0.014 over 500 valid replicates"
+M0_primary,subgroup:sex,Female,harrell_cindex,,,233.0,35.0,,,,True,suppressed: 35 events < 50
+M0_primary,subgroup:sex,Female,ipcw_cd_auroc,2.0,730.0,233.0,35.0,,,,True,suppressed: 35 events < 50
+M0_primary,subgroup:sex,Female,calibration_slope,2.0,730.0,233.0,35.0,,,,True,suppressed: 35 events < 50
+M0_primary,subgroup:sex,Female,calibration_in_the_large_risk_diff,2.0,730.0,233.0,35.0,,,,True,suppressed: 35 events < 50
+M0_primary,subgroup:sex,Male,harrell_cindex,,,138.0,19.0,,,,True,suppressed: 19 events < 50
+M0_primary,subgroup:sex,Male,ipcw_cd_auroc,2.0,730.0,138.0,19.0,,,,True,suppressed: 19 events < 50
+M0_primary,subgroup:sex,Male,calibration_slope,2.0,730.0,138.0,19.0,,,,True,suppressed: 19 events < 50
+M0_primary,subgroup:sex,Male,calibration_in_the_large_risk_diff,2.0,730.0,138.0,19.0,,,,True,suppressed: 19 events < 50
+M0_primary,subgroup:age,<65,harrell_cindex,,,158.0,26.0,,,,True,suppressed: 26 events < 50
+M0_primary,subgroup:age,<65,ipcw_cd_auroc,2.0,730.0,158.0,26.0,,,,True,suppressed: 26 events < 50
+M0_primary,subgroup:age,<65,calibration_slope,2.0,730.0,158.0,26.0,,,,True,suppressed: 26 events < 50
+M0_primary,subgroup:age,<65,calibration_in_the_large_risk_diff,2.0,730.0,158.0,26.0,,,,True,suppressed: 26 events < 50
+M0_primary,subgroup:age,>=65,harrell_cindex,,,213.0,28.0,,,,True,suppressed: 28 events < 50
+M0_primary,subgroup:age,>=65,ipcw_cd_auroc,2.0,730.0,213.0,28.0,,,,True,suppressed: 28 events < 50
+M0_primary,subgroup:age,>=65,calibration_slope,2.0,730.0,213.0,28.0,,,,True,suppressed: 28 events < 50
+M0_primary,subgroup:age,>=65,calibration_in_the_large_risk_diff,2.0,730.0,213.0,28.0,,,,True,suppressed: 28 events < 50
+M0_primary,subgroup:race_major,Black,harrell_cindex,,,125.0,16.0,,,,True,suppressed: 16 events < 50
+M0_primary,subgroup:race_major,Black,ipcw_cd_auroc,2.0,730.0,125.0,16.0,,,,True,suppressed: 16 events < 50
+M0_primary,subgroup:race_major,Black,calibration_slope,2.0,730.0,125.0,16.0,,,,True,suppressed: 16 events < 50
+M0_primary,subgroup:race_major,Black,calibration_in_the_large_risk_diff,2.0,730.0,125.0,16.0,,,,True,suppressed: 16 events < 50
+M0_primary,subgroup:race_major,White,harrell_cindex,,,213.0,33.0,,,,True,suppressed: 33 events < 50
+M0_primary,subgroup:race_major,White,ipcw_cd_auroc,2.0,730.0,213.0,33.0,,,,True,suppressed: 33 events < 50
+M0_primary,subgroup:race_major,White,calibration_slope,2.0,730.0,213.0,33.0,,,,True,suppressed: 33 events < 50
+M0_primary,subgroup:race_major,White,calibration_in_the_large_risk_diff,2.0,730.0,213.0,33.0,,,,True,suppressed: 33 events < 50
+M0_primary,subgroup:race_major,Asian,harrell_cindex,,,12.0,1.0,,,,True,suppressed: 1 events < 50
+M0_primary,subgroup:race_major,Asian,ipcw_cd_auroc,2.0,730.0,12.0,1.0,,,,True,suppressed: 1 events < 50
+M0_primary,subgroup:race_major,Asian,calibration_slope,2.0,730.0,12.0,1.0,,,,True,suppressed: 1 events < 50
+M0_primary,subgroup:race_major,Asian,calibration_in_the_large_risk_diff,2.0,730.0,12.0,1.0,,,,True,suppressed: 1 events < 50
+M0_primary,subgroup:obesity,no,harrell_cindex,,,259.0,36.0,,,,True,suppressed: 36 events < 50
+M0_primary,subgroup:obesity,no,ipcw_cd_auroc,2.0,730.0,259.0,36.0,,,,True,suppressed: 36 events < 50
+M0_primary,subgroup:obesity,no,calibration_slope,2.0,730.0,259.0,36.0,,,,True,suppressed: 36 events < 50
+M0_primary,subgroup:obesity,no,calibration_in_the_large_risk_diff,2.0,730.0,259.0,36.0,,,,True,suppressed: 36 events < 50
+M0_primary,subgroup:obesity,yes,harrell_cindex,,,112.0,18.0,,,,True,suppressed: 18 events < 50
+M0_primary,subgroup:obesity,yes,ipcw_cd_auroc,2.0,730.0,112.0,18.0,,,,True,suppressed: 18 events < 50
+M0_primary,subgroup:obesity,yes,calibration_slope,2.0,730.0,112.0,18.0,,,,True,suppressed: 18 events < 50
+M0_primary,subgroup:obesity,yes,calibration_in_the_large_risk_diff,2.0,730.0,112.0,18.0,,,,True,suppressed: 18 events < 50
+M0_primary,subgroup:weight_bearing,weight-bearing frontal,harrell_cindex,,,339.0,50.0,0.5958663507883343,0.5188087502116757,0.67029770286643,False,interpret via CI: 50 events < 100
+M0_primary,subgroup:weight_bearing,weight-bearing frontal,ipcw_cd_auroc,2.0,730.0,339.0,50.0,0.6085078296025844,0.5249577069827445,0.6859062469679018,False,interpret via CI: 50 events < 100
+M0_primary,subgroup:weight_bearing,weight-bearing frontal,calibration_slope,2.0,730.0,339.0,50.0,0.7631194331880542,,,False,interpret via CI: 50 events < 100
+M0_primary,subgroup:weight_bearing,weight-bearing frontal,calibration_in_the_large_risk_diff,2.0,730.0,339.0,50.0,0.011921707160148787,,,False,interpret via CI: 50 events < 100
+M0_primary,subgroup:weight_bearing,non-weight-bearing,harrell_cindex,,,32.0,4.0,,,,True,suppressed: 4 events < 50
+M0_primary,subgroup:weight_bearing,non-weight-bearing,ipcw_cd_auroc,2.0,730.0,32.0,4.0,,,,True,suppressed: 4 events < 50
+M0_primary,subgroup:weight_bearing,non-weight-bearing,calibration_slope,2.0,730.0,32.0,4.0,,,,True,suppressed: 4 events < 50
+M0_primary,subgroup:weight_bearing,non-weight-bearing,calibration_in_the_large_risk_diff,2.0,730.0,32.0,4.0,,,,True,suppressed: 4 events < 50
+M0_primary,subgroup:acquisition,frontal-only,harrell_cindex,,,203.0,19.0,,,,True,suppressed: 19 events < 50
+M0_primary,subgroup:acquisition,frontal-only,ipcw_cd_auroc,2.0,730.0,203.0,19.0,,,,True,suppressed: 19 events < 50
+M0_primary,subgroup:acquisition,frontal-only,calibration_slope,2.0,730.0,203.0,19.0,,,,True,suppressed: 19 events < 50
+M0_primary,subgroup:acquisition,frontal-only,calibration_in_the_large_risk_diff,2.0,730.0,203.0,19.0,,,,True,suppressed: 19 events < 50
+M0_primary,subgroup:acquisition,multi-view,harrell_cindex,,,168.0,35.0,,,,True,suppressed: 35 events < 50
+M0_primary,subgroup:acquisition,multi-view,ipcw_cd_auroc,2.0,730.0,168.0,35.0,,,,True,suppressed: 35 events < 50
+M0_primary,subgroup:acquisition,multi-view,calibration_slope,2.0,730.0,168.0,35.0,,,,True,suppressed: 35 events < 50
+M0_primary,subgroup:acquisition,multi-view,calibration_in_the_large_risk_diff,2.0,730.0,168.0,35.0,,,,True,suppressed: 35 events < 50
+sens_complete_case,overall,,harrell_cindex,,,325.0,49.0,0.5724469791481019,,,False,"complete-case: only patients with pain_score_max actually observed (M0's sole incompletely observed predictor) AND klg_contra observed, so the row set is complete across every clinical variable in the feature table; the missing indicators are constant by construction on that subset and excluded — dropped as constant in this subset: knee_pain_any_imp"
+sens_complete_case,overall,,ipcw_cd_auroc,1.0,365.0,325.0,49.0,0.6163226456369435,,,False,
+sens_complete_case,overall,,calibration_slope,1.0,365.0,325.0,49.0,1.1013285477727992,,,False,
+sens_complete_case,overall,,calibration_in_the_large_risk_diff,1.0,365.0,325.0,49.0,0.0062590983563304975,,,False,
+sens_complete_case,overall,,ipcw_cd_auroc,2.0,730.0,325.0,49.0,0.5828356839083279,,,False,
+sens_complete_case,overall,,calibration_slope,2.0,730.0,325.0,49.0,0.7304567148593686,,,False,
+sens_complete_case,overall,,calibration_in_the_large_risk_diff,2.0,730.0,325.0,49.0,0.01954057498238962,,,False,
+sens_complete_case,overall,,ipcw_cd_auroc,5.0,1825.0,325.0,49.0,0.6583172072029009,,,False,
+sens_complete_case,overall,,calibration_slope,5.0,1825.0,325.0,49.0,1.4016282635923774,,,False,
+sens_complete_case,overall,,calibration_in_the_large_risk_diff,5.0,1825.0,325.0,49.0,-0.005728955865608815,,,False,
+sens_drop_pain_predictors,overall,,harrell_cindex,,,371.0,54.0,0.5718554551772064,,,False,"no-pain-predictor set: knee_pain_any, pain_score_max and its indicator removed (also removes the exact collinearity)"
+sens_drop_pain_predictors,overall,,ipcw_cd_auroc,1.0,365.0,371.0,54.0,0.6142556858548852,,,False,
+sens_drop_pain_predictors,overall,,calibration_slope,1.0,365.0,371.0,54.0,1.0766687321434183,,,False,
+sens_drop_pain_predictors,overall,,calibration_in_the_large_risk_diff,1.0,365.0,371.0,54.0,0.003224257434153735,,,False,
+sens_drop_pain_predictors,overall,,ipcw_cd_auroc,2.0,730.0,371.0,54.0,0.5686819931346901,,,False,
+sens_drop_pain_predictors,overall,,calibration_slope,2.0,730.0,371.0,54.0,0.6736584933810935,,,False,
+sens_drop_pain_predictors,overall,,calibration_in_the_large_risk_diff,2.0,730.0,371.0,54.0,0.011620981165285676,,,False,
+sens_drop_pain_predictors,overall,,ipcw_cd_auroc,5.0,1825.0,371.0,54.0,0.6318248515112567,,,False,
+sens_drop_pain_predictors,overall,,calibration_slope,5.0,1825.0,371.0,54.0,1.3177537877813104,,,False,
+sens_drop_pain_predictors,overall,,calibration_in_the_large_risk_diff,5.0,1825.0,371.0,54.0,-0.010175736738512936,,,False,
+sens_race_included,overall,,harrell_cindex,,,371.0,54.0,0.5956914523974982,,,False,"race added to the predictor set (the primary excludes it, protocol section 21); White is the reference level"
+sens_race_included,overall,,ipcw_cd_auroc,1.0,365.0,371.0,54.0,0.6202830077363567,,,False,
+sens_race_included,overall,,calibration_slope,1.0,365.0,371.0,54.0,0.9592542510504447,,,False,
+sens_race_included,overall,,calibration_in_the_large_risk_diff,1.0,365.0,371.0,54.0,0.003224845549834321,,,False,
+sens_race_included,overall,,ipcw_cd_auroc,2.0,730.0,371.0,54.0,0.6097481701136453,,,False,
+sens_race_included,overall,,calibration_slope,2.0,730.0,371.0,54.0,0.7552803846872336,,,False,
+sens_race_included,overall,,calibration_in_the_large_risk_diff,2.0,730.0,371.0,54.0,0.011296025112298214,,,False,
+sens_race_included,overall,,ipcw_cd_auroc,5.0,1825.0,371.0,54.0,0.7092701328300636,,,False,
+sens_race_included,overall,,calibration_slope,5.0,1825.0,371.0,54.0,1.377971822448386,,,False,
+sens_race_included,overall,,calibration_in_the_large_risk_diff,5.0,1825.0,371.0,54.0,-0.011710857505325384,,,False,
+sens_landmark_30_90_180,overall,,not_run,,,,,,,,True,"DEFERRED — not run. The locked cohort is built at landmark day 90. Moving it to [30, 90, 180] changes ELIGIBILITY (who is event-free and still observed at the landmark), the time origin of `time_from_landmark`, the censoring distribution and therefore the event counts and the locked splits. Producing it requires re-running the Phase-1 follow-up/outcome pipeline (`src/followup.py`, `src/outcomes.py`, `src/assemble_cohort.py`) at each landmark and rebuilding `final_cohort.parquet`, `patient_splits.parquet` and `features_clinical.parquet` — i.e. overwriting locked files. This module refuses to touch them. To run it: add landmark-parameterised output paths so the alternative cohorts are written to a separate directory, re-derive splits per landmark with the same seed, then re-run M0 on each."

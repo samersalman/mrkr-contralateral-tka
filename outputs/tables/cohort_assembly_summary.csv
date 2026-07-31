@@ -1,0 +1,9 @@
+strategy,window_days,n_final,primary_events,exp_n,exp_events,match
+strict,365,1664,357,1664,357,True
+strict,730,1881,394,1881,394,True
+strict,1095,1967,406,1967,406,True
+recovery_any,365,3372,489,3372,489,True
+recovery_any,730,3709,533,3709,533,True
+recovery_any,1095,3842,547,3842,547,True
+recovery_confirmed,730,3541,517,3541,517,True
+recovery_confirmed,1095,3670,531,3670,531,True

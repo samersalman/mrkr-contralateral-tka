@@ -1,0 +1,3 @@
+reason,view,contra_side,split,n_images
+excessive_masking,lateral,R,test,2
+view_mask_drift,,,,1

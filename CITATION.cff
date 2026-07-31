@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+title: >-
+  Analysis code for "Preoperative radiograph predicts contralateral knee
+  arthroplasty after unilateral total knee arthroplasty"
+message: If you use this software, please cite it using these metadata.
+type: software
+license: MIT
+repository-code: https://github.com/samersalman/mrkr-contralateral-tka
+abstract: >-
+  Analysis pipeline for a study predicting contralateral knee arthroplasty
+  within five years from the preoperative radiograph of the contralateral
+  knee, using the Emory Knee Radiograph (MRKR) dataset. Contains code and
+  aggregate results only; no patient-level data is included or redistributed.
+keywords:
+  - total knee arthroplasty
+  - osteoarthritis
+  - radiographs
+  - survival analysis
+  - clinical prediction model
+  - deep learning
+# ADD EVERY CO-AUTHOR HERE before creating the Zenodo release. Zenodo reads this
+# file to build the DOI's citation record, and that record is what the paper cites.
+authors:
+  - family-names: Salman
+    given-names: Samer
+references:
+  - type: article
+    title: The Emory Knee Radiograph (MRKR) dataset
+    doi: 10.1007/s10278-026-01902-6
+    journal: Journal of Imaging Informatics in Medicine
+    year: 2026
+    authors:
+      - family-names: Price
+        given-names: Brandon J.
+      - family-names: Gichoya
+        given-names: Judy
+      - family-names: Chavoshi
+        given-names: Mohammadreza
+      - family-names: Trivedi
+        given-names: Hari

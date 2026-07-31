@@ -1,0 +1,4 @@
+split,arm,tertile,tertile_label,horizon_days,curve_max_day,n_patients,n_events,n_at_risk_horizon,min_predicted_risk,max_predicted_risk,mean_predicted_risk,km_cumulative_incidence,km_ci_lo,km_ci_hi,n_scored,n_events_scored,note
+val,m4_fusion,1,Lowest tertile,1825,1826,124,6,52,0.025119,0.114276,0.068062,0.071246,0.032082,0.154252,371,54,"cause-agnostic cumulative incidence; death is not ascertainable in this data source, so competing mortality is unmeasured"
+val,m4_fusion,2,Middle tertile,1825,1826,124,12,28,0.115491,0.238761,0.170436,0.171248,0.095482,0.296421,371,54,"cause-agnostic cumulative incidence; death is not ascertainable in this data source, so competing mortality is unmeasured"
+val,m4_fusion,3,Highest tertile,1825,1826,123,36,11,0.23932,0.719858,0.371135,0.36622,0.276076,0.474696,371,54,"cause-agnostic cumulative incidence; death is not ascertainable in this data source, so competing mortality is unmeasured"

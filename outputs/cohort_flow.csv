@@ -1,0 +1,12 @@
+step,description,n_primary,n_excluded_primary,n_strict,n_excluded_strict
+1,Total patients in demographics,83011,0,83011,0
+2,Patients with any knee radiograph,83011,0,83011,0
+3,Patients with CPT 27447,8525,74486,8525,74486
+4,Aged >=40 at index,8417,108,8417,108
+5,With exactly one interpretable index side (primary: coded or recovered single side; strict: coded only),7112,1305,4203,4214
+6,Without prior contralateral arthroplasty,6393,719,3756,447
+7,Without protocol infection/osteomyelitis exclusion (high-specificity),6381,12,3752,4
+8,With an eligible pre-index contralateral study (primary window 730d; strict 365d),3981,2400,1807,1945
+9,Without contralateral CPT 27447 through day 90,3940,41,1775,32
+10,Observed through day 90,3709,231,1664,111
+11,Final primary landmark cohort,3709,0,1664,0

@@ -1,0 +1,25 @@
+label,subset,denominator_n,endpoint_class,definition,window_desc,n_event_raw,n_event_after_s9,pct_of_denominator,note
+LOCKED,all_index_final,6381,exclusion_flag,has_contra_27447_day_0_90,"[0,90]",61,61,0.956,S9 exclusion flag: patients removed from cohort downstream
+LOCKED,all_index_final,6381,denominator,cohort_retained_after_s9,,6381,6320,99.044,index_final rows minus S9 exclusions (still pre imaging/observation gates)
+LOCKED,all_index_final,6381,primary,primary_event,"(90,1826] 5y",787,787,12.333,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,sensitivity_upper_bound,upper_bound_event,"(90,1826] any-modifier 27447",1255,1255,19.668,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,sensitivity_composite,composite_uni_event,"(90,1826] 27447-contra OR 27446-contra",795,795,12.459,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,sensitivity_augmented,augmented_event,primary AND contra/B image <=180d post-event,504,504,7.898,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,secondary_descriptive,sec_from_day1_365,"[1,365]",521,460,8.165,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,secondary_descriptive,sec_from_day1_730,"[1,730]",671,610,10.516,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,secondary_descriptive,sec_from_day1_1826,"[1,1826]",848,787,13.289,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,secondary_descriptive,sec_from_day91_365,"(90,365]",460,460,7.209,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,secondary_descriptive,sec_from_day91_730,"(90,730]",610,610,9.56,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,all_index_final,6381,secondary_descriptive,sec_from_day91_1826,"(90,1826]",787,787,12.333,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,exclusion_flag,has_contra_27447_day_0_90,"[0,90]",57,57,1.519,S9 exclusion flag: patients removed from cohort downstream
+LOCKED,strict_coded,3752,denominator,cohort_retained_after_s9,,3752,3695,98.481,index_final rows minus S9 exclusions (still pre imaging/observation gates)
+LOCKED,strict_coded,3752,primary,primary_event,"(90,1826] 5y",616,616,16.418,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,sensitivity_upper_bound,upper_bound_event,"(90,1826] any-modifier 27447",657,657,17.511,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,sensitivity_composite,composite_uni_event,"(90,1826] 27447-contra OR 27446-contra",620,620,16.525,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,sensitivity_augmented,augmented_event,primary AND contra/B image <=180d post-event,368,368,9.808,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,secondary_descriptive,sec_from_day1_365,"[1,365]",484,427,12.9,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,secondary_descriptive,sec_from_day1_730,"[1,730]",594,537,15.832,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,secondary_descriptive,sec_from_day1_1826,"[1,1826]",673,616,17.937,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,secondary_descriptive,sec_from_day91_365,"(90,365]",427,427,11.381,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,secondary_descriptive,sec_from_day91_730,"(90,730]",537,537,14.312,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream
+LOCKED,strict_coded,3752,secondary_descriptive,sec_from_day91_1826,"(90,1826]",616,616,16.418,pre imaging(S8)+observation(S10) gates; FINAL-cohort event count requires intersecting those gates downstream

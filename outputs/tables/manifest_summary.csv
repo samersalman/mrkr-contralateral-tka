@@ -1,0 +1,2 @@
+n_unique_patients,n_unique_studies,n_unique_image_files,n_unique_paths,pct_paths_missing_or_malformed,est_transfer_size
+3709,3709,6122,6122,0.0,N/A: file sizes unavailable in metadata

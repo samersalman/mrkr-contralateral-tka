@@ -1,0 +1,4 @@
+split,n_patients,pct,n_events,event_pct
+train,2597,70.0,373,14.36
+val,371,10.0,54,14.56
+test,741,20.0,106,14.3
