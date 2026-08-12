@@ -2,7 +2,7 @@
   "module": "train_model",
   "purpose": "Phase 2 local training environment (protocol section 28)",
   "generated_utc": "2026-07-26T16:57:05+00:00",
-  "venv": "<HOME>/.venvs/mrkr-torch",
+  "venv": "/Users/samersalman/.venvs/mrkr-torch",
   "interpreter_source": "uv-managed prebuilt CPython (pyenv 3.12.8 lacks _lzma)",
   "requirements_file": "requirements-training.txt",
   "python": "3.12.13",

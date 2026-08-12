@@ -2,17 +2,29 @@
 
 This module exists so that reading the test set is a deliberate act in one auditable
 place, rather than a flag on the trainer. ``src/train_model.py`` refuses the sealed split
-everywhere by default; this is the only caller that passes ``allow_sealed=True``.
+everywhere by default. Two callers lift that refusal, and only for the sealed split:
+this module, and ``src/eval_models.py`` when it renders that split
+(``eval_models.py:504`` and ``:570``, both gated on the split actually being the sealed
+one). No other caller passes ``allow_sealed=True``.
 
 What it does, and equally what it must never do
 -----------------------------------------------
-It **loads** frozen artefacts and **applies** them:
+It **loads** frozen artefacts and **applies** the two that produce a hazard:
 
 * the per-seed checkpoints written by ``src/train_model.py`` under one training-contract
   hash, which is asserted to match the hand-over index;
-* the ensemble rule (per-interval hazards averaged across the five pre-specified seeds);
-* the horizon-specific recalibration **fitted on validation** and frozen in
-  ``train_arms.json``.
+* the ensemble rule (per-interval hazards averaged across the five pre-specified seeds).
+
+It **records, and does not apply**, the horizon-specific recalibration **fitted on
+validation** and frozen in ``train_arms.json``. The parameters are copied verbatim into
+``test_scoring.json`` so the transform is pinned at the moment of the read, but the
+``hazards`` array written below is the **raw** seed-averaged ensemble.
+``src/eval_models.py`` applies the transform downstream, at render time
+(``apply_recalibration`` at ``eval_models.py:646``), which is where every recalibrated
+number in ``outputs/tables/test_metrics.csv`` comes from; the two frozen Cox arms are
+published as fitted and are never recalibrated at all (``eval_models.py:580``). Anything
+reading ``test_hazards_{arm}.npz`` directly is therefore reading pre-recalibration
+hazards and must apply the transform itself.
 
 It **never** trains, refits, re-tunes, re-selects an epoch, or fits a recalibration on
 test rows. Protocol sections 12 and 17 permit exactly one scripted read once the model,
@@ -178,8 +190,9 @@ def score_arm(arm: str, summary: dict, *, frames, designs, stats, labels, npy, i
     nll = dt_nll_numpy(ens, ds.at_risk, ds.target)[0]
 
     recal = dict(summary["recalibration"])
-    log.info("  %-22s %d/%d test patients, %d events | test NLL %.4f | frozen recalibration "
-             "from validation applied at %s",
+    log.info("  %-22s %d/%d test patients, %d events | test NLL %.4f | hazards written RAW "
+             "(pre-recalibration); frozen validation recalibration recorded, not applied, "
+             "at %s",
              arm, len(ds), EXPECTED_TEST_PATIENTS, int(ds.event.sum()), nll,
              ", ".join(sorted(recal)))
 
@@ -220,8 +233,10 @@ def main(argv=None) -> int:
         return 2
 
     log.warning("*** SEALED TEST READ. This is the ONE permitted read. Nothing is fitted "
-                "here; frozen checkpoints and the validation-fitted recalibration are "
-                "applied as-is. Any later change to a model invalidates this estimate. ***")
+                "here: frozen checkpoints and the frozen ensemble rule are applied as-is, "
+                "and the validation-fitted recalibration is recorded but NOT applied — "
+                "src/eval_models.py applies it at render time. Any later change to a model "
+                "invalidates this estimate. ***")
 
     require_torch()
     cohort_dir = cfg.path(cfg["paths"]["cohort_dir"])

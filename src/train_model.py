@@ -227,9 +227,9 @@ def assert_development_splits(splits, allow_sealed: bool = False) -> list[str]:
     Every reader in this module routes through this function, so there is exactly one
     place that decides which splits may be materialised. ``allow_sealed`` defaults to
     False, so nothing reaches the test split by accident or by omission: the caller has to
-    name it. The only caller that passes True is ``src/score_test.py``, which exists to
-    perform the single sealed read after the model, ensemble rule, thresholds and analysis
-    script are frozen (protocol sections 12 and 17).
+    name it. **Two callers pass True, and only for the sealed split:** ``src/score_test.py``,
+    which performs the single sealed read (sections 12 and 17), and ``src/eval_models.py`` when
+    it renders it (``eval_models.py:504`` and ``:570``, both gated). No other caller passes True.
 
     Training NEVER passes it. A model that has seen the test split is not a model this
     study can report.

@@ -47,7 +47,12 @@ is written under derived-data/ and only AGGREGATE summaries go to outputs/.
 
 Run:  python3 -m src.crop_qa --dicom-root <DICOM root>   (full, decidable gate)
       python3 -m src.crop_qa                             (degraded: crop-only tiles)
+      python3 -m src.crop_qa --rebuild-image-audit --sidecar A/labels.csv --sidecar B/labels.csv
       python3 -m src.crop_qa --score <filled image-audit workbook>
+
+Reviewers do not edit the workbook by hand: `python3 -m src.qa_review_app` serves the
+panels one at a time and writes one CSV per reviewer, which `--merge` folds back into the
+`<item>_r<k>` columns that `--score` reads.
 """
 from __future__ import annotations
 
@@ -100,8 +105,21 @@ DEGRADED_BANNER = ("**DEGRADED MODE — HALF-SELECT WAS NOT VISUALLY VERIFIABLE*
 # Reviewer scoring vocabulary for the protocol section 23 image audit.
 SCORE_OK = "OK"
 SCORE_ERROR = "ERROR"
+# A THIRD, distinct verdict: the reviewer looked and the item is undecidable from the
+# evidence in front of them. It is NOT "OK" (nothing was verified), NOT "ERROR" (nothing
+# was found wrong), and NOT blank (blank means not yet reviewed, so a blank workbook and
+# a finished-but-partly-undecidable one would look identical). It exists because the
+# source DICOMs are gone: rows whose reviewer panel is crop-only cannot answer
+# `laterality`, and the protocol's 2% critical-error rate must be computed over the rows
+# that were actually decidable, with the undecidable count reported alongside it.
+SCORE_NA = "NOT_ASSESSABLE"
 _OK_ALIASES = {"OK", "PASS", "Y", "YES", "CORRECT", "GOOD", "1", "TRUE", "T"}
 _ERROR_ALIASES = {"ERROR", "FAIL", "N", "NO", "WRONG", "BAD", "0", "FALSE", "F"}
+# NOTE: bare "NA" is deliberately NOT here — it has always parsed as "not yet reviewed"
+# and workbooks in the wild use it that way. The tokens below are unambiguous, and
+# src/qa_review_app.py only ever writes the canonical SCORE_NA.
+_NA_ALIASES = {"NOT_ASSESSABLE", "NOT ASSESSABLE", "NOT-ASSESSABLE", "UNASSESSABLE",
+               "N/A", "CANNOT_ASSESS", "CANNOT ASSESS", "UNDECIDABLE"}
 
 
 def setup_logging(log_path: Path) -> logging.Logger:
@@ -412,12 +430,22 @@ def sample_cells(side: pd.DataFrame, views: list[str], n_per_cell: int, seed: in
 
 
 def stratified_sample(df: pd.DataFrame, strata_cols: list[str], n_target: int,
-                      seed: int) -> pd.DataFrame:
+                      seed: int, prefer: pd.Series | None = None) -> pd.DataFrame:
     """Proportional stratified sample of size ~n_target (largest-remainder allocation).
 
     Every non-empty stratum contributes at least one row so no cell of the design is
     invisible to the reviewers; the remainder is allocated proportionally and any
     shortfall is topped up at random from the unsampled pool.
+
+    `prefer` is an optional boolean Series aligned to `df.index` naming rows to fill a
+    stratum's slots FIRST. It changes neither the strata nor their quotas — only WHICH
+    member of a stratum takes a slot — and it exists for one reason: a re-sample must
+    not silently throw away rows whose reviewer panel can still be rendered. The
+    full-film panel (the only thing that makes the `laterality` item answerable) is
+    re-read from the source DICOM, and once that DICOM is gone a row that leaves the
+    sample can never come back with a decidable panel. Preferring already-panelled rows
+    introduces no bias, because those rows were themselves drawn at random from the same
+    strata: "was in the previous random sample" carries no information about the image.
     """
     if df.empty:
         return df.copy()
@@ -436,13 +464,35 @@ def stratified_sample(df: pd.DataFrame, strata_cols: list[str], n_target: int,
         quota = quota + base
     quota = np.minimum(quota, sizes.astype(int))
 
-    picks = [g.sample(n=int(q), random_state=seed) for (_, g), q in zip(groups, quota) if q > 0]
+    picks = []
+    for (_, g), q in zip(groups, quota):
+        q = int(q)
+        if q <= 0:
+            continue
+        if prefer is None:
+            picks.append(g.sample(n=q, random_state=seed))
+            continue
+        mask = prefer.reindex(g.index).fillna(False).astype(bool)
+        head, tail = g[mask], g[~mask]
+        take = head if len(head) <= q else head.sample(n=q, random_state=seed)
+        short = q - len(take)
+        if short > 0 and len(tail):
+            take = pd.concat([take, tail.sample(n=min(short, len(tail)), random_state=seed)])
+        picks.append(take)
     out = pd.concat(picks) if picks else df.head(0)
     if len(out) < n_target:
         rest = df.loc[~df.index.isin(out.index)]
         extra = min(len(rest), n_target - len(out))
         if extra:
-            out = pd.concat([out, rest.sample(n=extra, random_state=seed)])
+            if prefer is None:
+                out = pd.concat([out, rest.sample(n=extra, random_state=seed)])
+            else:
+                # Shuffle first, then float the preferred rows to the front, so the
+                # top-up is still random within "panelled" and "not panelled".
+                shuffled = rest.sample(frac=1.0, random_state=seed)
+                pref_first = prefer.reindex(shuffled.index).fillna(False).astype(bool)
+                out = pd.concat([out, shuffled[pref_first].head(extra),
+                                 shuffled[~pref_first].head(max(0, extra - int(pref_first.sum())))])
     return out.sort_index()
 
 
@@ -451,7 +501,9 @@ def stratified_sample(df: pd.DataFrame, strata_cols: list[str], n_target: int,
 # =============================================================================
 def build_image_audit(cfg, side_all: pd.DataFrame, audit_splits: list[str], min_images: int,
                       items: list[str], n_reviewers: int, seed: int,
-                      index_of: dict[str, str]) -> tuple[pd.DataFrame, dict]:
+                      index_of: dict[str, str],
+                      full_film_keys: set[str] | None = None,
+                      prefer_keys: set[str] | None = None) -> tuple[pd.DataFrame, dict]:
     """Blank adjudication workbook: one row per sampled image, one column per (item x reviewer).
 
     NOT OUTCOME-UNBLINDING. This is LABEL/CROP quality assurance and it precedes model
@@ -463,6 +515,19 @@ def build_image_audit(cfg, side_all: pd.DataFrame, audit_splits: list[str], min_
 
     Stratified on split x view x contra_side x bilateral-vs-unilateral, because those are
     the strata whose failure modes differ: only bilateral frontals undergo the half-select.
+
+    `full_film_keys` names the rows for which a FULL-FILM reviewer panel already exists on
+    disk; they are flagged `panel_has_full_film`. This matters because the source DICOMs are
+    no longer available: a row drawn today that has no panel yet can only ever get a
+    CROP-ONLY panel, on which the `laterality` item is undecidable by construction (both
+    knees are native pre-index, the mirror removes the left/right cue, the border mask
+    removes the marker). A reviewer must score that item NOT_ASSESSABLE rather than guess,
+    and the workbook has to say which rows those are.
+
+    `prefer_keys` (default: `full_film_keys`) names rows to fill a stratum's slots first.
+    Pass the PREVIOUS sample's keys to re-draw over an enlarged frame without discarding
+    the rows whose panel is already decidable — see `stratified_sample` for why that is
+    not a biased draw.
     """
     pool = side_all[side_all["split"].isin(audit_splits)].copy()
     info = {"splits_requested": list(audit_splits),
@@ -473,12 +538,15 @@ def build_image_audit(cfg, side_all: pd.DataFrame, audit_splits: list[str], min_
         return pool, info
     pool["laterality_kind"] = np.where(pool["laterality"].astype(str) == "B",
                                        "bilateral_B", "unilateral")
+    anchor = prefer_keys if prefer_keys is not None else full_film_keys
+    prefer = pool["key"].astype(str).isin(set(anchor)) if anchor else None
     take = stratified_sample(pool, ["split", "view", "contra_side", "laterality_kind"],
-                             min_images, seed).reset_index(drop=True)
+                             min_images, seed, prefer=prefer).reset_index(drop=True)
 
     take["qa_index"] = take["empi_anon"].map(index_of).fillna("")
     take["crop_png"] = take["key"].astype(str) + ".png"
     take["qa_panel_png"] = take["key"].astype(str) + ".png"
+    take["panel_has_full_film"] = take["key"].astype(str).isin(set(full_film_keys or ()))
     for k in range(1, int(n_reviewers) + 1):
         for item in items:
             take[f"{item}_r{k}"] = ""            # reviewer k scores OK / ERROR
@@ -490,7 +558,7 @@ def build_image_audit(cfg, side_all: pd.DataFrame, audit_splits: list[str], min_
     cols = ["qa_index", "empi_anon", "split", "view", "laterality", "laterality_kind",
             "contra_side", "index_side", "horizontal_flip", "inverted", "half_selected",
             "orientation", "mirrored", "crop_method", "crop_confidence", "masked_pct",
-            "out_size", "shard", "key", "crop_png", "qa_panel_png"]
+            "out_size", "shard", "key", "crop_png", "qa_panel_png", "panel_has_full_film"]
     cols = [c for c in cols if c in take.columns]
     review_cols = [c for c in take.columns if c.endswith(tuple(
         [f"_r{k}" for k in range(1, int(n_reviewers) + 1)])) or c.endswith("_adjudicated")]
@@ -499,7 +567,65 @@ def build_image_audit(cfg, side_all: pd.DataFrame, audit_splits: list[str], min_
     info["by_split"] = take["split"].value_counts().to_dict()
     info["by_view"] = take["view"].value_counts().to_dict()
     info["by_laterality_kind"] = take["laterality_kind"].value_counts().to_dict()
+    info["n_with_full_film_panel"] = int(take["panel_has_full_film"].sum())
+    info["n_crop_only_panel"] = int((~take["panel_has_full_film"]).sum())
+    info["n_strata"] = int(take.groupby(
+        ["split", "view", "contra_side", "laterality_kind"], dropna=False).ngroups)
     return take, info
+
+
+def stable_index_map(existing_csv: Path, patients) -> dict[str, str]:
+    """empi_anon -> opaque qa_index, PRESERVING any assignment already on disk.
+
+    The index is burned into every reviewer panel PNG as its title (`P0026 fron ...`), so
+    renumbering would silently re-label 584 images a reviewer is about to adjudicate.
+    Patients already in the key keep their index; new ones continue from the current max.
+    """
+    prev: dict[str, str] = {}
+    if existing_csv.exists():
+        old = pd.read_csv(existing_csv, dtype=str)
+        if {"empi_anon", "qa_index"}.issubset(old.columns):
+            prev = dict(zip(old["empi_anon"].astype(str), old["qa_index"].astype(str)))
+    nxt = 0
+    for v in prev.values():
+        try:
+            nxt = max(nxt, int(str(v).lstrip("P")))
+        except ValueError:
+            continue
+    out = dict(prev)
+    for p in sorted(str(x) for x in patients):
+        if p not in out:
+            nxt += 1
+            out[p] = f"P{nxt:04d}"
+    return out
+
+
+def load_sidecars(paths: list[Path], log: logging.Logger | None = None) -> pd.DataFrame:
+    """Concatenate several preprocess sidecars into ONE frame, tagged with their shard dir.
+
+    src.preprocess_images writes one sidecar per run and `preprocess_run.json` records only
+    the LAST one, so the train+val run (2026-07-26) and the test run (2026-07-29) live in
+    two separate files. The protocol section 23 audit spans config `audit_splits`, which
+    includes test, so the audit frame is the UNION of the runs, not whichever ran last.
+    """
+    frames = []
+    for p in paths:
+        p = Path(p).expanduser()
+        if not p.exists():
+            raise FileNotFoundError(f"sidecar not found: {p}")
+        df = pd.read_csv(p, dtype={"empi_anon": str, "sop_uid": str})
+        df["_shard_dir"] = str(p.parent)
+        frames.append(df)
+        if log is not None:
+            log.info("sidecar %s: %d rows, splits %s", _rel(p), len(df),
+                     df["split"].value_counts().to_dict())
+    if not frames:
+        raise ValueError("no sidecars given")
+    out = pd.concat(frames, ignore_index=True)
+    n_dup = int(out["key"].duplicated().sum())
+    if n_dup and log is not None:
+        log.warning("%d duplicate crop keys across sidecars — keeping the first", n_dup)
+    return out.drop_duplicates("key").reset_index(drop=True)
 
 
 def cohens_kappa(a: list[str], b: list[str]) -> float:
@@ -536,6 +662,8 @@ def _normalize_score(v) -> str | None:
         return SCORE_OK
     if s in _ERROR_ALIASES:
         return SCORE_ERROR
+    if s in _NA_ALIASES:
+        return SCORE_NA
     return "UNPARSED"
 
 
@@ -567,17 +695,25 @@ def score_image_audit(cfg, workbook: Path, log: logging.Logger) -> int:
         if missing:
             rows.append({"item": item, "status": f"missing columns {missing}",
                          "n_scored": 0, "raw_agreement": "", "cohens_kappa": "",
-                         "critical_error_rate": "", "n_critical": "", "exceeds_threshold": ""})
+                         "critical_error_rate": "", "n_critical": "", "exceeds_threshold": "",
+                         "n_unparsed": 0, "n_not_assessable": 0})
             continue
         scored = wb[cols].map(_normalize_score)
         n_unparsed = int((scored == "UNPARSED").sum().sum())
-        complete = scored.notna().all(axis=1) & (scored != "UNPARSED").all(axis=1)
+        # A row is NOT_ASSESSABLE as soon as either reviewer says so: agreement, kappa and
+        # the critical-error rate are all defined over the rows that were DECIDABLE, and a
+        # row one reviewer could not decide is not one of them.
+        not_assessable = (scored == SCORE_NA).any(axis=1)
+        n_na = int(not_assessable.sum())
+        complete = (scored.notna().all(axis=1) & (scored != "UNPARSED").all(axis=1)
+                    & ~not_assessable)
         sub = scored[complete]
         total_scored += int(len(sub))
         if sub.empty:
             rows.append({"item": item, "status": "awaiting reviewer input", "n_scored": 0,
                          "raw_agreement": "", "cohens_kappa": "", "critical_error_rate": "",
-                         "n_critical": "", "exceeds_threshold": "", "n_unparsed": n_unparsed})
+                         "n_critical": "", "exceeds_threshold": "", "n_unparsed": n_unparsed,
+                         "n_not_assessable": n_na})
             continue
 
         # Raw agreement / kappa are defined pairwise; with n_reviewers == 2 this is the
@@ -603,6 +739,7 @@ def score_image_audit(cfg, workbook: Path, log: logging.Logger) -> int:
             "n_critical": n_crit,
             "exceeds_threshold": bool(over),
             "n_unparsed": n_unparsed,
+            "n_not_assessable": n_na,
         })
 
     summary = pd.DataFrame(rows)
@@ -613,12 +750,12 @@ def score_image_audit(cfg, workbook: Path, log: logging.Logger) -> int:
     summary.to_csv(out_csv, index=False)
     log.info("image-audit aggregate -> %s", out_csv)
     for r in rows:
-        log.info("  %-16s %-28s n=%s agree=%s kappa=%s crit=%s", r["item"], r["status"],
+        log.info("  %-16s %-28s n=%s agree=%s kappa=%s crit=%s n/a=%s", r["item"], r["status"],
                  r.get("n_scored"), r.get("raw_agreement"), r.get("cohens_kappa"),
-                 r.get("critical_error_rate"))
+                 r.get("critical_error_rate"), r.get("n_not_assessable"))
     if total_scored == 0:
         log.warning("AWAITING REVIEWER INPUT: no item has two completed reviewer columns yet. "
-                    "Fill %s (each cell OK or ERROR) and re-run --score.", workbook)
+                    "Fill %s (each cell OK, ERROR or %s) and re-run --score.", workbook, SCORE_NA)
         return 0
     if expanded:
         log.error("*** EXPAND THE REVIEW *** critical-error rate exceeds "
@@ -626,8 +763,104 @@ def score_image_audit(cfg, workbook: Path, log: logging.Logger) -> int:
                   "review to be EXPANDED (draw a further stratified sample of the affected "
                   "stratum, re-adjudicate, and do not proceed to training on the current "
                   "sample).", 100.0 * thresh, "; ".join(expanded))
-    else:
-        log.info("no item exceeds critical_error_threshold=%.2f%%", 100.0 * thresh)
+        # The 2% rule is a GATE, so a failing gate must not exit 0. Anything scripting this
+        # module (a Makefile, CI, `&&` in a shell) reads the status code, not the log.
+        return 2
+    log.info("no item exceeds critical_error_threshold=%.2f%%", 100.0 * thresh)
+    return 0
+
+
+def rebuild_image_audit(cfg, sidecar_paths: list[Path], log: logging.Logger,
+                        write_panels: bool = True, backup_name: str | None = None) -> int:
+    """Rebuild ONLY the protocol section 23 (i) workbook + its reviewer panels.
+
+    A targeted mode, not a re-run of the gate. The full `main()` re-renders the contact
+    sheet, the checklist and both other audits; re-running it today would rewrite a
+    signed-off-pending checklist from a DICOM tree that no longer exists and would sample
+    the contact sheet from whichever run wrote `preprocess_run.json` last. This entry
+    point touches four things and nothing else: the index key, the image-audit workbook,
+    its backup, and the missing panel PNGs.
+
+    Why it exists: the workbook on disk is train-344 / val-56 / test-0, because it was
+    built on 2026-07-26 and the 1,216 test crops were not written until 2026-07-29.
+    `crop_qa.audit_splits` has always asked for all three.
+    """
+    coh = cfg.path(cfg["paths"]["cohort_dir"])
+    qa = cfg["crop_qa"]
+    seed = int(cfg["reproducibility"]["random_seed"])
+    image_format = str(cfg["preprocess"]["shards"]["image_format"])
+    panel_dir = coh / QA_PANEL_DIR
+
+    side_all = load_sidecars(sidecar_paths, log)
+    log.info("audit frame: %d crops / %d patients, splits %s", len(side_all),
+             side_all["empi_anon"].nunique(), side_all["split"].value_counts().to_dict())
+
+    # Panels already on disk were rendered WITH the full film (run.log, 584/584). The
+    # DICOMs are gone, so this set can never grow — it is the decidability frontier.
+    full_film_keys = {p.stem for p in panel_dir.glob(f"*.{image_format}")} if panel_dir.exists() else set()
+    log.info("%d existing reviewer panels carry a full film (source DICOMs are gone, so no "
+             "new full-film panel can be rendered)", len(full_film_keys))
+
+    index_of = stable_index_map(coh / INDEX_KEY_CSV, side_all["empi_anon"].unique())
+    pd.DataFrame({"empi_anon": list(index_of), "qa_index": list(index_of.values())}
+                 ).sort_values("qa_index").to_csv(coh / INDEX_KEY_CSV, index=False)
+
+    # Anchor the re-draw on the PREVIOUS sample, not on every panel on disk. Both keep the
+    # same number of decidable rows, but anchoring on the previous sample makes the train
+    # and val portion a verifiable SUBSET of it, whereas anchoring on all panels would also
+    # recruit the protocol section 7 panels — and that sample deliberately over-samples
+    # side_source == "recovered", which would leak an enrichment into this one.
+    wb_path = coh / IMAGE_AUDIT_WORKBOOK
+    prefer_keys = full_film_keys
+    if wb_path.exists():
+        prev = pd.read_csv(wb_path, dtype=str)
+        if "key" in prev.columns:
+            prefer_keys = set(prev["key"].astype(str)) & full_film_keys
+            log.info("anchoring the re-draw on %d rows of the previous sample", len(prefer_keys))
+
+    take, info = build_image_audit(
+        cfg, side_all, list(qa["audit_splits"]), int(qa["image_audit_min_images"]),
+        list(qa["score_items"]), int(qa["n_reviewers"]), seed, index_of,
+        full_film_keys=full_film_keys, prefer_keys=prefer_keys)
+    info["n_carried_over"] = int(take["key"].astype(str).isin(prefer_keys).sum())
+    if backup_name and wb_path.exists():
+        backup = coh / backup_name
+        if backup.exists():
+            log.info("backup already present, not overwriting: %s", backup)
+        else:
+            backup.write_bytes(wb_path.read_bytes())
+            log.info("previous workbook preserved -> %s", backup)
+    take.to_csv(wb_path, index=False)
+    log.info("image audit workbook -> %s (%d rows; by split %s; by view %s; %d strata; "
+             "%d carried over from the previous sample)", wb_path, len(take), info["by_split"],
+             info["by_view"], info["n_strata"], info["n_carried_over"])
+    log.info("panels: %d rows keep a FULL-FILM panel, %d rows are CROP-ONLY (the `laterality` "
+             "item is undecidable on those and must be scored %s)",
+             info["n_with_full_film_panel"], info["n_crop_only_panel"], SCORE_NA)
+    if info.get("splits_missing"):
+        log.warning("audit_splits %s are still absent from the frame", info["splits_missing"])
+
+    n_new = 0
+    if write_panels:
+        need = take[~take["panel_has_full_film"]].merge(
+            side_all[["key", "_shard_dir"]], on="key", how="left")
+        panel_dir.mkdir(parents=True, exist_ok=True)
+        for shard_dir, grp in need.groupby("_shard_dir"):
+            crops = load_crops(Path(str(shard_dir)), grp, image_format)
+            for r in grp.itertuples(index=False):
+                key = str(r.key)
+                img = crops.get(key)
+                if img is None:
+                    log.warning("no crop in %s for %s — panel not written", _rel(shard_dir), key)
+                    continue
+                label = (f"{r.qa_index} {str(r.view)[:4]} lat={r.laterality} "
+                         f"idx={r.index_side} con={r.contra_side} hf={r.horizontal_flip}\n"
+                         f"source DICOM unavailable — half-select NOT verifiable")
+                save_qa_panel(None, img, panel_dir / f"{key}.{image_format}", label)
+                n_new += 1
+        log.info("wrote %d NEW crop-only reviewer panels -> %s", n_new, panel_dir)
+
+    log.info("score it with: python3 -m src.qa_review_app --mode image --reviewer <name>")
     return 0
 
 
@@ -1157,6 +1390,18 @@ def main(argv=None) -> int:
                     help="skip exporting the per-row film+crop reviewer panels")
     ap.add_argument("--score", default=None,
                     help="score a COMPLETED protocol section 23 image-audit workbook and exit")
+    ap.add_argument("--rebuild-image-audit", action="store_true",
+                    help="rebuild ONLY the protocol section 23 (i) workbook and its missing "
+                         "reviewer panels, then exit. Does not touch the contact sheet, the "
+                         "checklist, or the other two audits.")
+    ap.add_argument("--sidecar", action="append", default=None, metavar="LABELS_CSV",
+                    help="preprocess sidecar to fold into the audit frame; repeatable. Its "
+                         "parent directory is used as the shard dir. Defaults to the sidecar "
+                         "named by preprocess_run.json (and preprocess_run_test.json if "
+                         "present), because one run record cannot describe two runs.")
+    ap.add_argument("--backup-workbook", default=None, metavar="FILENAME",
+                    help="with --rebuild-image-audit, copy the existing workbook to this name "
+                         "under the cohort dir before overwriting it")
     args = ap.parse_args(argv)
 
     cfg = load_config(args.config)
@@ -1166,6 +1411,26 @@ def main(argv=None) -> int:
     # ---- scorer mode: reads a filled workbook, writes the aggregate, exits ----
     if args.score:
         return score_image_audit(cfg, Path(args.score).expanduser(), log)
+
+    # ---- targeted rebuild of the protocol section 23 (i) sample ----
+    if args.rebuild_image_audit:
+        sidecars = [Path(s).expanduser() for s in (args.sidecar or [])]
+        if not sidecars:
+            coh = cfg.path(cfg["paths"]["cohort_dir"])
+            for name in ("preprocess_run.json", "preprocess_run_test.json"):
+                rec = coh / name
+                if rec.exists():
+                    try:
+                        sidecars.append(Path(json.loads(rec.read_text())["sidecar_csv"]))
+                    except Exception as exc:
+                        log.warning("could not read %s (%s)", name, exc)
+            sidecars = list(dict.fromkeys(sidecars))
+        if not sidecars:
+            log.error("no --sidecar given and no preprocess run record names one")
+            return 2
+        return rebuild_image_audit(cfg, sidecars, log,
+                                   write_panels=not args.no_audit_panels,
+                                   backup_name=args.backup_workbook)
 
     coh = cfg.path(cfg["paths"]["cohort_dir"])
     seed = int(cfg["reproducibility"]["random_seed"])
@@ -1267,9 +1532,12 @@ def main(argv=None) -> int:
             lat = {"n": 0, "detail": "failure report is empty (0 failures of any kind)"}
 
     # ---- protocol section 23 (i): image-level audit ---------------------------------
+    _panelled = {p.stem for p in (coh / QA_PANEL_DIR).glob(f"*.{image_format}")} \
+        if (coh / QA_PANEL_DIR).exists() else set()
     image_audit, image_audit_info = build_image_audit(
         cfg, side_all, list(qa["audit_splits"]), int(qa["image_audit_min_images"]),
-        list(qa["score_items"]), int(qa["n_reviewers"]), seed, index_of)
+        list(qa["score_items"]), int(qa["n_reviewers"]), seed, index_of,
+        full_film_keys=_panelled)
     image_audit_path = coh / IMAGE_AUDIT_WORKBOOK
     image_audit.to_csv(image_audit_path, index=False)
     if len(image_audit) < int(qa["image_audit_min_images"]):
@@ -1359,6 +1627,11 @@ def main(argv=None) -> int:
             save_qa_panel(panel_stages.get(k), panel_crops.get(k), panel_dir / f"{k}.png", label)
         log.info("reviewer panels -> %s (%d panels, %d with a full film; git-ignored)",
                  panel_dir, len(want), panel_diag["ok"])
+        # The workbook is written before the panels exist, so tell it which rows ended up
+        # with a decidable (full-film) panel — the `laterality` item depends on it.
+        image_audit["panel_has_full_film"] = (image_audit["panel_has_full_film"].astype(bool)
+                                              | image_audit["key"].isin(set(panel_stages)))
+        image_audit.to_csv(image_audit_path, index=False)
 
     # ---- residual burned-in markers (protocol section 13 / non-negotiable #1) --------
     # Measured on the FINISHED crops, not from a producer-side counter: the gate needs to

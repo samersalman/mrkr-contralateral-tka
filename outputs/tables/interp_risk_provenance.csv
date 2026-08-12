@@ -1,0 +1,2 @@
+arm,n_patients,risk_source_for_case_selection,risk_source_for_all_deltas,mean_risk_published,mean_risk_local,max_abs_risk_diff,median_abs_risk_diff,spearman_published_vs_local,auroc_5y_published_table,auroc_5y_local
+m2_frontal,734,published npz (Colab CUDA fp16 autocast),"local fp32, recomputed in-process",0.14767227894742432,0.14784038150982706,0.009570899753003625,0.0003871029755656008,0.9999386414590893,0.836759,0.8366918532659895

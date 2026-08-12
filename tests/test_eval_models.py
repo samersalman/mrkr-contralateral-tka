@@ -2762,3 +2762,354 @@ def test_main_writes_the_net_benefit_table_through_split_path():
         "the decision curve must be written through split_path like every other output, so "
         "the sealed run writes test_net_benefit.csv beside the validation one")
     assert "NET_BENEFIT_COLUMNS" in src
+
+
+# =========================================================================== #
+# 12. V6 REVISION - A3 IMAGING ROBUSTNESS STRATA                               #
+#                                                                              #
+# Added 2026-08-11 with the config-driven family declaration. Everything here  #
+# is an EXTENSION: no test above was modified, and the published equity table  #
+# is asserted to be unchanged rather than merely believed to be.               #
+# =========================================================================== #
+import src.subgroups as sgm                                       # noqa: E402
+from pathlib import Path as _Path                                 # noqa: E402
+
+TEST_EVENTS = 106            # the sealed split's event count
+TEST_CONTROLS = 162          # patients observed event-free beyond 1,825 days
+
+#: Per-arm train-validation gap AT THE RETAINED CHECKPOINT, independently recomputed from
+#: outputs/tables/train_history.csv during the v6 defect pass and quoted in the T5 brief.
+#: These are the numbers a supplementary learning-curve figure must be consistent with.
+GAP_AT_RETAINED = {
+    "m2_frontal": 0.027812, "m3_image": 0.052354, "m4_frontal": 0.023332,
+    "m4_fusion": 0.051978, "m0d_clinical": 0.035980, "m1_klg": 0.052365,
+    "r1_densenet_frontal": 0.009344,
+}
+
+
+def _robustness_frame_stub(n: int = 12) -> pd.DataFrame:
+    """A frame carrying every column a robustness rule can name."""
+    return pd.DataFrame({
+        "empi_anon": [f"{800000 + i}" for i in range(n)],
+        "sex": "Female", "race": "Asian", "age_at_index": 70.0, "obesity": 0,
+        "weight_bearing_frontal": True, "view_set": "frontal",
+        "side_source": ["coded", "recovered"] * (n // 2),
+        "acquisition_year": np.linspace(2007, 2021, n).round().astype(int),
+        "image_masked_pct_max": np.where(np.arange(n) % 2 == 0, 0.2275, 0.31),
+        "image_crop_confidence_min": np.where(np.arange(n) % 3 == 0, 0.7, 1.0),
+        "image_crop_method_any_intensity_profile": (np.arange(n) % 3 == 0),
+        "image_inverted_any": (np.arange(n) % 4 == 0),
+        "image_half_selected_any": (np.arange(n) % 5 != 0),
+    })
+
+
+# --- the refactor: one declaration, two consumers --------------------------- #
+def test_subgroup_levels_now_reads_the_shared_declaration():
+    cfg = load_config(DEFAULT_CONFIG)
+    roster = _subgroup_roster(80, 12)
+    from_eval = [(s, lv) for s, lv, _ in em.subgroup_levels(cfg, roster.frame)]
+    from_config = [(f.report_label, l.report_label)
+                   for f in sgm.load_families(cfg, "equity") for l in f.levels]
+    assert from_eval == from_config
+    assert em.family_mask is sgm.family_mask and em.load_families is sgm.load_families
+
+
+def test_the_equity_table_is_unchanged_by_the_refactor():
+    """The thirteen published rows, in the published order, with no additions."""
+    path = _Path("outputs/tables/test_subgroups.csv")
+    if not path.exists():                                    # pragma: no cover
+        pytest.skip("outputs/tables/test_subgroups.csv is absent")
+    cfg = load_config(DEFAULT_CONFIG)
+    roster = _subgroup_roster(80, 12)
+    got = [(s, lv) for s, lv, _ in em.subgroup_levels(cfg, roster.frame)]
+    pub = pd.read_csv(path)[["subgroup", "level"]].apply(tuple, axis=1).tolist()
+    assert got == pub
+
+
+def test_a_robustness_family_never_leaks_into_the_equity_scope():
+    cfg = load_config(DEFAULT_CONFIG)
+    equity = {f.key for f in sgm.load_families(cfg, "equity")}
+    robust = {f.key for f in sgm.load_families(cfg, "robustness")}
+    assert equity == set(sgm.FROZEN_EQUITY_FAMILIES)
+    assert robust - equity, "the robustness scope adds nothing"
+    assert "acquisition_era_calendar" not in equity
+
+
+# --- the floor, unweakened -------------------------------------------------- #
+def test_the_robustness_table_uses_the_same_floor_and_defines_no_copy():
+    src = _Path(em.__file__).read_text(encoding="utf-8")
+    assert "SUPPRESS_BELOW_EVENTS = " not in src, (
+        "the floor is imported from src.model_clinical and never redefined here")
+    assert src.count("suppress_below_events") >= 2
+    cfg = load_config(DEFAULT_CONFIG)
+    assert int(cfg["model_eval"]["suppress_below_events"]) == em.SUPPRESS_BELOW_EVENTS == 50
+
+
+def test_a_lowered_floor_is_refused_by_the_robustness_builder():
+    bad = load_config(DEFAULT_CONFIG)
+    bad["model_eval"] = dict(bad["model_eval"])
+    bad["model_eval"]["suppress_below_events"] = 5
+    roster = _subgroup_roster(60, 10)
+    with pytest.raises(AssertionError, match="protocol section 21"):
+        em.build_imaging_robustness(bad, roster, {}, make_engine(roster, 5), 1825, QUIET)
+
+
+def test_below_the_floor_a_cell_is_suppressed_with_the_section_21_reason():
+    cfg = load_config(DEFAULT_CONFIG)
+    roster = _subgroup_roster(120, 20, seed=5)
+    fam = sgm.load_families(cfg, "robustness")[0]
+    m = np.ones(len(roster), dtype=bool)
+    row = em._robustness_row(fam, fam.levels[0], "m2_frontal", "not applicable", m, roster,
+                             make_arm("m2_frontal", roster), make_engine(roster, 5), 1825,
+                             em.SUPPRESS_BELOW_EVENTS, em.PRIMARY_METRIC)
+    assert row["suppressed"] and row["suppression_reason"].startswith("protocol section 21")
+    assert np.isnan(row["estimate"]) and np.isnan(row["ci_lo"])
+
+
+def test_no_partition_of_the_sealed_split_can_leave_three_estimable_levels():
+    """Stated as a test because it is why every three-level era scheme mostly suppresses."""
+    assert 3 * em.SUPPRESS_BELOW_EVENTS > TEST_EVENTS
+    assert 2 * em.SUPPRESS_BELOW_EVENTS <= TEST_EVENTS      # two is arithmetically possible
+
+
+# --- a second, different reason a cell has no number ------------------------ #
+def test_a_level_with_no_control_beyond_the_horizon_is_suppressed_as_not_estimable():
+    """An IPCW AUROC needs a case AND a control. Neither the floor nor a wide interval
+    describes a level that has zero patients observed past the horizon."""
+    cfg = load_config(DEFAULT_CONFIG)
+    n = 200
+    pids = np.array([f"{700000 + i}" for i in range(n)], dtype="<U8")
+    event = np.zeros(n, dtype=int); event[:60] = 1
+    time = np.where(event == 1, 900.0, 1200.0)               # nobody survives past 1825
+    frame = pd.DataFrame({"empi_anon": pids, "split": "val", "time_from_landmark": time,
+                          "event_indicator": event, "sex": "Female", "race": "Asian",
+                          "age_at_index": 70.0, "obesity": 0,
+                          "weight_bearing_frontal": True, "view_set": "frontal"})
+    g_grid, g_vals = tm.reverse_km(time, event)
+    roster = em.Roster(pids=pids, time=time, event=event, frame=frame,
+                       g_grid=g_grid, g_vals=g_vals)
+    fam = sgm.load_families(cfg, "robustness")[0]
+    row = em._robustness_row(fam, fam.levels[0], "m2_frontal", "not applicable",
+                             np.ones(n, dtype=bool), roster, make_arm("m2_frontal", roster),
+                             make_engine(roster, 5), 1825, em.SUPPRESS_BELOW_EVENTS,
+                             em.PRIMARY_METRIC)
+    assert row["n_events"] == 60 >= em.SUPPRESS_BELOW_EVENTS, "it clears the floor"
+    assert row["n_controls_beyond_horizon"] == 0
+    assert row["suppressed"] and row["suppression_reason"].startswith("not estimable")
+    assert "undefined, not imprecise" in row["suppression_reason"]
+    assert np.isnan(row["estimate"])
+
+
+def test_harrell_c_is_reported_because_it_survives_where_the_auroc_does_not():
+    assert em.ROBUSTNESS_METRICS == (em.PRIMARY_METRIC, "harrell_c")
+    cfg = load_config(DEFAULT_CONFIG)
+    n = 200
+    pids = np.array([f"{700000 + i}" for i in range(n)], dtype="<U8")
+    event = np.zeros(n, dtype=int); event[:60] = 1
+    rng = np.random.default_rng(11)
+    time = np.where(event == 1, rng.uniform(100.0, 900.0, n), 1200.0)
+    frame = pd.DataFrame({"empi_anon": pids, "split": "val", "time_from_landmark": time,
+                          "event_indicator": event, "sex": "Female", "race": "Asian",
+                          "age_at_index": 70.0, "obesity": 0,
+                          "weight_bearing_frontal": True, "view_set": "frontal"})
+    g_grid, g_vals = tm.reverse_km(time, event)
+    roster = em.Roster(pids=pids, time=time, event=event, frame=frame,
+                       g_grid=g_grid, g_vals=g_vals)
+    fam = sgm.load_families(cfg, "robustness")[0]
+    row = em._robustness_row(fam, fam.levels[0], "m2_frontal", "not applicable",
+                             np.ones(n, dtype=bool), roster, make_arm("m2_frontal", roster),
+                             make_engine(roster, 8), 1825, em.SUPPRESS_BELOW_EVENTS,
+                             "harrell_c")
+    assert not row["suppressed"] and np.isfinite(row["estimate"])
+    assert em.HARRELL_C_NOTE in row["note"], "the horizon column is a schema artifact"
+
+
+def test_the_wide_interval_flag_is_the_same_one_the_a1_a2_module_declared():
+    import src.v6_analyses as v6
+    assert em.WIDE_INTERVAL_WIDTH == v6.WIDE_INTERVAL_WIDTH == 0.15
+
+
+# --- the era caveat travels in the table ------------------------------------ #
+def test_every_era_row_carries_both_caveats_in_its_own_note():
+    cfg = load_config(DEFAULT_CONFIG)
+    roster = _subgroup_roster(120, 20, seed=7)
+    for fam in sgm.load_families(cfg, "robustness"):
+        if not fam.key.startswith("acquisition_era"):
+            continue
+        row = em._robustness_row(fam, fam.levels[0], "m2_frontal", "not applicable",
+                                 np.ones(len(roster), dtype=bool), roster,
+                                 make_arm("m2_frontal", roster), make_engine(roster, 5),
+                                 1825, em.SUPPRESS_BELOW_EVENTS, em.PRIMARY_METRIC)
+        note = row["note"].lower()
+        assert "per-patient random shift" in note
+        assert "section 17" in note and "not been obtained" in note
+        assert "d17" in note and "d35" in note
+
+
+def test_the_unavailable_strata_table_answers_the_editor_rather_than_dropping_the_request():
+    cfg = load_config(DEFAULT_CONFIG)
+    df = em.build_metadata_availability(cfg)
+    assert list(df.columns) == em.METADATA_AVAILABILITY_COLUMNS
+    assert not df["available"].any()
+    joined = " ".join(df["stratum"]).lower()
+    for want in ("equipment", "manufacturer", "site"):
+        assert want in joined
+    assert any("horizontal flip" in s.lower() for s in df["stratum"])
+    assert all(len(r) > 40 for r in df["reason"])
+
+
+# --- the write namespace ---------------------------------------------------- #
+def test_the_v6_entry_point_can_only_write_v6_files():
+    names = set(em.V6_ROBUSTNESS_BASENAMES.values()) | set(em.V6_LEARNING_CURVE_BASENAMES.values())
+    assert names and all(n.startswith("v6_") and n.endswith(".csv") for n in names)
+    cfg = load_config(DEFAULT_CONFIG)
+    published = {em.split_path(cfg, k, s).name
+                 for k in ("metrics_csv", "comparisons_csv", "subgroups_csv",
+                           "convergence_csv", "net_benefit_csv")
+                 for s in ("val", SEALED_SPLIT)}
+    assert not (names & published), "a v6 output would overwrite a published table"
+    src = inspect.getsource(em.run_v6)
+    assert 'name.startswith("v6_")' in src, "the namespace guard must be in the writer"
+    assert "_out(" not in src and "split_path(" not in src, (
+        "run_v6 must not resolve a published output path at all")
+
+
+def test_the_v6_subcommand_does_not_change_the_published_entry_point():
+    src = _Path(em.__file__).read_text(encoding="utf-8")
+    tail = src[src.rindex('if __name__ == "__main__":'):]
+    assert "main_v6(sys.argv[2:])" in tail and "SystemExit(main())" in tail
+    assert em.V6_SUBCOMMAND == "v6"
+    ap_src = inspect.getsource(em.main)
+    assert "v6" not in ap_src.split("def main")[0]
+
+
+# =========================================================================== #
+# 13. V6 REVISION - A4 LEARNING CURVES                                         #
+# =========================================================================== #
+def _history_config(tmp_path, rows: list[dict], patience: int = 8, max_epochs: int = 40):
+    p = tmp_path / "history.csv"
+    pd.DataFrame(rows).to_csv(p, index=False)
+    cfg = load_config(DEFAULT_CONFIG)
+    cfg["model_image"] = dict(cfg["model_image"])
+    cfg["model_image"]["early_stopping"] = {"monitor": "val_nll", "patience": patience}
+    cfg["model_image"]["max_epochs"] = max_epochs
+    cfg["model_image"]["local"] = dict(cfg["model_image"]["local"])
+    cfg["model_image"]["local"]["history_csv"] = str(p)
+    cfg["model_eval"] = dict(cfg["model_eval"])
+    return cfg
+
+
+def _series(arm="a", seed=1, best=3, patience=8, train0=0.60, val0=0.65):
+    """A history whose validation minimum is at ``best`` and which then runs ``patience``
+    more epochs, exactly as early stopping produces."""
+    rows = []
+    for e in range(best + patience + 1):
+        val = val0 - 0.01 * min(e, best) + 0.02 * max(0, e - best)
+        train = train0 - 0.01 * e
+        rows.append(dict(arm=arm, seed=seed, epoch=e, train_nll=train, val_nll=val,
+                         lr=1e-4, secs=1.0, improved=(e <= best)))
+    return rows
+
+
+def test_the_retained_epoch_is_marked_on_exactly_one_row_per_series(tmp_path):
+    cfg = _history_config(tmp_path, _series(best=3) + _series(seed=2, best=5))
+    curves, per_seed, per_arm = em.build_learning_curves(cfg, QUIET)
+    assert list(curves.columns) == em.LEARNING_CURVE_COLUMNS
+    assert list(per_seed.columns) == em.LEARNING_CURVE_SEED_COLUMNS
+    assert list(per_arm.columns) == em.LEARNING_CURVE_ARM_COLUMNS
+    for (_arm, _seed), g in curves.groupby(["arm", "seed"]):
+        assert int(g["is_retained_epoch"].sum()) == 1
+        assert int(g.loc[g["is_retained_epoch"], "val_nll"].iloc[0] * 1e9) == \
+            int(g["val_nll"].min() * 1e9)
+    assert per_seed["retained_epoch"].tolist() == [3, 5]
+    assert per_seed["epochs_after_retained"].tolist() == [8, 8]
+
+
+def test_epochs_from_retained_is_signed_so_a_figure_can_align_the_series(tmp_path):
+    cfg = _history_config(tmp_path, _series(best=3))
+    curves, _s, _a = em.build_learning_curves(cfg, QUIET)
+    assert curves["epochs_from_retained"].min() == -3
+    assert curves["epochs_from_retained"].max() == 8
+    assert (curves.loc[curves["is_retained_epoch"], "epochs_from_retained"] == 0).all()
+
+
+def test_the_overfit_gap_is_not_the_train_validation_gap_and_the_table_says_so(tmp_path):
+    cfg = _history_config(tmp_path, _series(best=3))
+    _c, per_seed, per_arm = em.build_learning_curves(cfg, QUIET)
+    r = per_seed.iloc[0]
+    assert r["gap_at_retained"] != r["val_overfit_gap_last_minus_min"]
+    assert r["val_overfit_gap_last_minus_min"] == pytest.approx(0.02 * 8, abs=1e-9)
+    for note in (r["note"], per_arm.iloc[0]["note"]):
+        assert "val_nll[last] - min(val_nll)" in note
+        assert "patience=8" in note
+    assert "LOWER BOUND" in per_arm.iloc[0]["note"]
+    assert "dropout" in per_arm.iloc[0]["note"] and "augmentation" in per_arm.iloc[0]["note"]
+
+
+def test_a_history_whose_last_improved_epoch_is_not_the_minimum_is_refused(tmp_path):
+    rows = _series(best=3)
+    rows[6]["improved"] = True                    # a later epoch claims improvement
+    cfg = _history_config(tmp_path, rows)
+    with pytest.raises(AssertionError, match="retained-epoch rule is wrong"):
+        em.build_learning_curves(cfg, QUIET)
+
+
+def test_a_run_that_stopped_on_neither_patience_nor_max_epochs_is_refused(tmp_path):
+    rows = _series(best=3)[:-2]                   # truncated: 6 epochs past the minimum
+    cfg = _history_config(tmp_path, rows)
+    with pytest.raises(AssertionError, match="neither the configured patience"):
+        em.build_learning_curves(cfg, QUIET)
+
+
+# --- against the real artefacts --------------------------------------------- #
+def _real_history_cfg():
+    cfg = load_config(DEFAULT_CONFIG)
+    return cfg if cfg.path(cfg["model_image"]["local"]["history_csv"]).exists() else None
+
+
+def test_every_real_series_stopped_exactly_patience_epochs_past_the_checkpoint():
+    cfg = _real_history_cfg()
+    if cfg is None:                                          # pragma: no cover
+        pytest.skip("outputs/tables/train_history.csv is absent")
+    _c, per_seed, _a = em.build_learning_curves(cfg, QUIET)
+    patience = int(cfg["model_image"]["early_stopping"]["patience"])
+    assert len(per_seed) == 35, "7 arms x 5 seeds"
+    assert (per_seed["epochs_after_retained"] == patience).all(), (
+        "this is the whole reason val_overfit_gap is not a train-validation gap")
+
+
+def test_the_per_arm_gap_at_the_retained_checkpoint_matches_the_verified_values():
+    cfg = _real_history_cfg()
+    if cfg is None:                                          # pragma: no cover
+        pytest.skip("outputs/tables/train_history.csv is absent")
+    _c, _s, per_arm = em.build_learning_curves(cfg, QUIET)
+    got = dict(zip(per_arm["arm"], per_arm["mean_gap_at_retained"]))
+    assert set(got) == set(GAP_AT_RETAINED)
+    for arm, want in GAP_AT_RETAINED.items():
+        assert got[arm] == pytest.approx(want, abs=5e-6), arm
+
+
+def test_the_published_val_overfit_gap_is_reproduced_not_reinterpreted():
+    cfg = _real_history_cfg()
+    path = _Path("outputs/tables/test_convergence.csv")
+    if cfg is None or not path.exists():                     # pragma: no cover
+        pytest.skip("train_history.csv or test_convergence.csv is absent")
+    _c, _s, per_arm = em.build_learning_curves(cfg, QUIET)
+    pub = pd.read_csv(path).set_index("arm")
+    for _, r in per_arm.iterrows():
+        assert float(r["mean_val_overfit_gap"]) == pytest.approx(
+            float(pub.loc[r["arm"], "val_overfit_gap"]), abs=1e-6), r["arm"]
+        assert str(r["convergence_status"]) == str(pub.loc[r["arm"], "status"])
+
+
+def test_the_gap_at_the_retained_checkpoint_is_far_smaller_than_the_published_one():
+    """The defect the supplementary figure exists to correct: 'the training split was
+    memorised' rests on last-minus-min, which is a different quantity."""
+    cfg = _real_history_cfg()
+    if cfg is None:                                          # pragma: no cover
+        pytest.skip("outputs/tables/train_history.csv is absent")
+    _c, _s, per_arm = em.build_learning_curves(cfg, QUIET)
+    image = per_arm[per_arm["convergence_status"] == em.STATUS_OVERFIT]
+    assert len(image) == 4, "the four severe_overfit arms"
+    assert (image["mean_gap_at_retained"] < image["mean_val_overfit_gap"]).all()
+    assert image["mean_gap_at_retained"].max() < 0.06

@@ -15,7 +15,7 @@ the decision, and the justification.
   `system` (the interpreter that has the dependencies). Reproducibility is
   carried by pinned `requirements.txt`. **Deviation from plan note, documented.**
 - **Git:** The enclosing git repository is rooted at the HOME directory
-  (`<HOME>`), not this project, and has no commits. The pipeline
+  (`/Users/samersalman`), not this project, and has no commits. The pipeline
   performs NO git operations. A project-level `.gitignore` excludes
   `metadata-files/`, `derived-data/`, and manuscript source docs as
   defense-in-depth. No PHI is ever staged or committed.

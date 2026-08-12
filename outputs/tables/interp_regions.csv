@@ -1,0 +1,26 @@
+item,value,note
+joint_region_box,rows 128-384 cols 128-384,the central half of the 512 px crop in each dimension
+joint_region_area_fraction,0.250000,
+border_band_px,31,config preprocess.mask_border_frac 0.06 x 512
+border_band_area_fraction,0.227524,
+peripheral_area_fraction,0.522476,
+medial_area_fraction,0.125000,image LEFT half of the joint box; crops read as LEFT knees
+lateral_area_fraction,0.125000,
+patellofemoral_area_fraction,0.062500,"patellar projection zone, rows 128-256 cols 192-320"
+n_frontal_crops_scanned,858,
+joint_line_inside_box_fraction,0.9103,"model-free matched-filter detector, frontal crops"
+joint_line_row_median,284.5,
+joint_line_row_iqr,224-334,
+limb_centre_inside_box_fraction,0.9848,Otsu limb silhouette centre column inside the box columns
+joint_line_AND_limb_centre_inside_box_fraction,0.9009,both landmarks inside; the honest joint coverage of the FIXED box
+mean_limb_width_covered_by_box,0.7954,mean share of the limb's own width falling inside the box columns
+limb_centre_col_median,240.2,IQR 202-283; image centre is 256
+limb_width_median,264.0,
+n_crops_with_nonzero_border_band,145,of 1216 test crops = 11.9%
+border_band_nonzero_pixel_share,0.000491,share of all border-band pixels that are not exactly 0
+border_band_max_value,48,uint8; the marker masker fills with a ring median capped at 60
+residual_marker_crops_pct,18.5,"upper bound, saturated bone edges share the signature; n=1216"
+residual_marker_by_view_pct,"{""frontal"": 9.2, ""lateral"": 43.0, ""sunrise"": 21.6}",
+nonzero_border_band_pct_frontal,6.8,
+nonzero_border_band_pct_lateral,25.2,
+nonzero_border_band_pct_sunrise,16.2,

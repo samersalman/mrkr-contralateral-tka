@@ -234,6 +234,352 @@ subgroups:
   obesity_flag: "obesity"
   event_flag_bins: {sparse: 50, moderate: 100}   # <50, 50-99, >=100 events
 
+  # ===========================================================================
+  # THE SINGLE DECLARATION OF EVERY SUBGROUP FAMILY  (added 2026-08-11, v6 A3)
+  # ===========================================================================
+  # Until 2026-08-11 the family list was hard-coded TWICE - in src/subgroups.py
+  # (cohort tallies) and in src/eval_models.py (equity audit) - so the cohort
+  # description and the equity audit could drift apart silently. Both modules now
+  # read THIS list and nothing else. src/subgroups.py owns the parser
+  # (subgroups.load_families / family_mask); src/eval_models.py imports it.
+  #
+  # Each family carries BOTH label sets on purpose. The two consumers publish
+  # different reviewer-facing names and both sets are already in published files
+  # (outputs/subgroup_counts.csv uses cohort_label; outputs/tables/*_subgroups.csv
+  # uses report_label), so "one source" means one declaration carrying two
+  # renderings, never one renaming that silently rewrites a published table.
+  #
+  #   key           machine name; stable, never printed to a reviewer
+  #   cohort_label  what src/subgroups.py writes into subgroup_family / subgroup
+  #   report_label  what src/eval_models.py writes into subgroup / level
+  #                 (reviewer-facing: no underscores are allowed in these)
+  #   scopes        which consumers may use the family
+  #                   cohort      -> src/subgroups.py, whole final cohort
+  #                   equity      -> eval_models.subgroup_levels, published
+  #                                  {val,test}_subgroups.csv. THIS LIST IS
+  #                                  FROZEN AT THE SIX ORIGINAL FAMILIES; adding
+  #                                  one here rewrites a published table.
+  #                   robustness  -> eval_models v6 imaging robustness table
+  #                                  (outputs/tables/v6_robustness_strata.csv)
+  #   source        clinical -> columns already on the cohort / roster frame
+  #                 imaging  -> needs the per-image join onto
+  #                             derived-data/cohort/preprocess_labels.csv, which
+  #                             only eval_models performs; a source:imaging family
+  #                             may not carry scope cohort or equity
+  #   partition     true  -> the levels must sum to N and to the event total
+  #                 false -> selected levels only (race), or a level is undefined
+  #                          for some patients
+  #   note          copied verbatim into the note column of every output row of
+  #                 that family. This is how a caveat travels WITH the numbers
+  #                 instead of only in prose.
+  #
+  # Rule vocabulary - closed, and deliberately tiny:
+  #   {column: <frame column>, op: eq|ne|lt|le|gt|ge|is_true|is_false|between,
+  #    value: <scalar> | [lo, hi]   (between is inclusive at both ends),
+  #    value_from: <dotted key under subgroups:>  # overrides value, e.g. age_cutoff}
+  # Labels may contain "{cutoff}", substituted with subgroups.age_cutoff.
+  families:
+
+    # ---- the six original families. Order is the published row order. -------
+    - key: sex
+      cohort_label: "sex"
+      report_label: "Sex"
+      scopes: [cohort, equity]
+      source: clinical
+      partition: true
+      levels:
+        - {key: female, cohort_label: "Female", report_label: "Female",
+           rule: {column: sex, op: eq, value: "Female"}}
+        - {key: male, cohort_label: "Male", report_label: "Male",
+           rule: {column: sex, op: eq, value: "Male"}}
+
+    - key: age_at_index
+      cohort_label: "age_at_index"
+      report_label: "Age group"
+      scopes: [cohort, equity]
+      source: clinical
+      partition: true
+      levels:
+        # NaN ages fall to neither bucket by design of the strict < / >=
+        # comparison; the partition assertion is what proves there are none.
+        - {key: under_cutoff, cohort_label: "<{cutoff}", report_label: "Under {cutoff} years",
+           rule: {column: age_at_index, op: lt, value_from: age_cutoff}}
+        - {key: at_or_over_cutoff, cohort_label: ">={cutoff}",
+           report_label: "{cutoff} years or older",
+           rule: {column: age_at_index, op: ge, value_from: age_cutoff}}
+
+    - key: race
+      cohort_label: "race"
+      report_label: "Race group"
+      scopes: [cohort, equity]
+      source: clinical
+      partition: false          # 3 SELECTED groups; other race values are excluded
+      levels:
+        - {key: black, cohort_label: "Black", report_label: "Black",
+           rule: {column: race, op: eq, value_from: race_groups.black}}
+        - {key: white, cohort_label: "White", report_label: "White",
+           rule: {column: race, op: eq, value_from: race_groups.white}}
+        - {key: asian, cohort_label: "Asian", report_label: "Asian",
+           rule: {column: race, op: eq, value_from: race_groups.asian}}
+
+    - key: obesity
+      cohort_label: "obesity"
+      report_label: "Obesity"
+      scopes: [cohort, equity]
+      source: clinical
+      partition: true
+      levels:
+        # lifetime MAX(obesity) per patient; see src/subgroups.py build_patient_frame
+        - {key: "yes", cohort_label: "yes", report_label: "Yes",
+           rule: {column: obesity, op: eq, value: 1}}
+        - {key: "no", cohort_label: "no", report_label: "No",
+           rule: {column: obesity, op: eq, value: 0}}
+
+    - key: imaging_weight_bearing
+      cohort_label: "imaging_weight_bearing"
+      report_label: "Frontal radiograph technique"
+      scopes: [cohort, equity, robustness]
+      source: clinical
+      partition: true
+      levels:
+        - {key: wb, cohort_label: "WB", report_label: "Weight bearing",
+           rule: {column: weight_bearing_frontal, op: is_true}}
+        - {key: non_wb, cohort_label: "non-WB", report_label: "Non weight bearing",
+           rule: {column: weight_bearing_frontal, op: is_false}}
+
+    - key: imaging_views
+      cohort_label: "imaging_views"
+      report_label: "Imaging views"
+      scopes: [cohort, equity, robustness]
+      source: clinical
+      partition: true
+      levels:
+        # frontal-only is exactly the single-token 'frontal' view_set; multi-view is
+        # its strict complement, which guarantees the partition sums to N/events.
+        - {key: frontal_only, cohort_label: "frontal-only", report_label: "Frontal only",
+           rule: {column: view_set, op: eq, value: "frontal"}}
+        - {key: multi_view, cohort_label: "multi-view", report_label: "Multiple views",
+           rule: {column: view_set, op: ne, value: "frontal"}}
+
+    # ---- laterality source (v6 A3) ------------------------------------------
+    - key: laterality_source
+      cohort_label: "laterality_source"
+      report_label: "Index laterality source"
+      scopes: [cohort, robustness]
+      source: clinical
+      partition: true
+      note: >-
+        side_source records how the INDEX operative side was established: 'coded'
+        = an interpretable RT/LT modifier on the earliest CPT 27447; 'recovered' =
+        rule-based reconciliation of concordant same-day-or-earlier CPT / ICD /
+        image signals (deviation D2). It is not a neural-network output and must
+        not be conflated with the model-inferred per-image laterality, view and
+        horizontal-flip annotations (protocol section 23(i)). The recovered arm is
+        the exposure the protocol section-7 audit was meant to validate; that audit
+        is still unscored (D22), so this stratum measures the consequence of an
+        unvalidated annotation.
+      levels:
+        - {key: coded, cohort_label: "coded", report_label: "Coded laterality",
+           rule: {column: side_source, op: eq, value: "coded"}}
+        - {key: recovered, cohort_label: "recovered", report_label: "Recovered laterality",
+           rule: {column: side_source, op: eq, value: "recovered"}}
+
+    # ---- acquisition era (v6 A3) --------------------------------------------
+    # THREE declared schemes, all reported, none dropped. Edges are functions of
+    # the calendar range or of the DEVELOPMENT-split date distribution alone; no
+    # edge is a function of a test event count. Development (train+val, n=2,968)
+    # study-year quantiles, computed once: 1/3 = 2016, median = 2018, 2/3 = 2019.
+    #
+    # THE CAVEAT BELOW IS NOT OPTIONAL AND IS CARRIED IN THE OUTPUT TABLE.
+    - key: acquisition_era_calendar
+      cohort_label: "acquisition_era_calendar"
+      report_label: "Acquisition era (five-year calendar spans)"
+      scopes: [cohort, robustness]
+      source: clinical
+      partition: true
+      note: &era_note >-
+        UNCONFIRMED DATE COMPARABILITY. The era label is derived from
+        StudyDate_anon, which carries a PER-PATIENT RANDOM SHIFT (see
+        src/inventory.py and outputs/data_quality_report.md: "Absolute calendar
+        dates are meaningless, but within-patient day intervals are valid").
+        Protocol section 17 demands written confirmation that de-identified dates
+        are comparable across patients; deviation D17 recorded that it "has not
+        been obtained", and as of 2026-08-11 it still has not. This stratum is
+        therefore a stratification on a shifted date of unknown per-patient offset,
+        not on true acquisition year, and it must not be read as an
+        acquisition-technology or equipment-generation effect. It is additionally
+        confounded with retrospective record availability: on the test split
+        median follow-up falls from 1,826 days in 2007-2011 to 430 days in
+        2017-2021 while the share observed through five years falls from 97.2% to
+        1.0%, and the earliest era carries zero events. Post hoc under D35.
+      levels:
+        - {key: era_2007_2011, cohort_label: "2007-2011", report_label: "2007 to 2011",
+           rule: {column: acquisition_year, op: between, value: [2007, 2011]}}
+        - {key: era_2012_2016, cohort_label: "2012-2016", report_label: "2012 to 2016",
+           rule: {column: acquisition_year, op: between, value: [2012, 2016]}}
+        - {key: era_2017_2021, cohort_label: "2017-2021", report_label: "2017 to 2021",
+           rule: {column: acquisition_year, op: between, value: [2017, 2021]}}
+
+    - key: acquisition_era_devtertile
+      cohort_label: "acquisition_era_devtertile"
+      report_label: "Acquisition era (development tertile edges)"
+      scopes: [cohort, robustness]
+      source: clinical
+      partition: true
+      note: *era_note
+      levels:
+        - {key: era_upto_2015, cohort_label: "<=2015", report_label: "2015 and earlier",
+           rule: {column: acquisition_year, op: le, value: 2015}}
+        - {key: era_2016_2018, cohort_label: "2016-2018", report_label: "2016 to 2018",
+           rule: {column: acquisition_year, op: between, value: [2016, 2018]}}
+        - {key: era_2019_plus, cohort_label: ">=2019", report_label: "2019 and later",
+           rule: {column: acquisition_year, op: ge, value: 2019}}
+
+    - key: acquisition_era_devmedian
+      cohort_label: "acquisition_era_devmedian"
+      report_label: "Acquisition era (development median edge)"
+      scopes: [cohort, robustness]
+      source: clinical
+      partition: true
+      note: *era_note
+      levels:
+        - {key: era_upto_2017, cohort_label: "<=2017", report_label: "2017 and earlier",
+           rule: {column: acquisition_year, op: le, value: 2017}}
+        - {key: era_2018_plus, cohort_label: ">=2018", report_label: "2018 and later",
+           rule: {column: acquisition_year, op: ge, value: 2018}}
+
+    # ---- image quality (v6 A3; source: imaging, robustness only) -------------
+    # These need derived-data/cohort/preprocess_labels.csv, which is PER IMAGE.
+    # eval_models aggregates it to one row per patient under two declared scopes
+    # (all_crops / frontal_only) and evaluates every source:imaging family once
+    # per scope; the output carries an image_scope column. They are NOT offered to
+    # src/subgroups.py, which is a locked extraction over the typed Parquet inputs
+    # and must not grow a CSV dependency.
+    - key: image_masking
+      report_label: "Border and marker masking"
+      scopes: [robustness]
+      source: imaging
+      partition: true
+      note: >-
+        masked_pct is the fraction of the finished 512x512 crop set to zero. Every crop
+        carries the fixed 31-px border band (border_only_masked_pct below); anything
+        above that floor is additional burned-in marker or text masking. UNDER THE
+        all_crops SCOPE THIS STRATUM IS CONFOUNDED WITH VIEW AVAILABILITY: lateral films
+        carry markers far more often than frontal ones, so on the m2_frontal roster (734
+        test patients with a frontal crop) 212 of 316 multi-view patients sit above the
+        floor against 51 of 418 frontal-only, summing to this family's 263; on the
+        740-patient m4_fusion roster it is 214 of 322 and 51 of 418, summing to 265. The
+        frontal_only scope is the unconfounded version of this contrast; its
+        additional-masking level holds 21 events and is suppressed by the 50-event
+        floor, so the two-sided comparison exists only under the confounded definition
+        and must not be reported as unconfounded. Post hoc under D35.
+      levels:
+        - {key: border_only, report_label: "Border band only",
+           rule: {column: image_masked_pct_max, op: le,
+                  value_from: border_only_masked_pct}}
+        - {key: additional_masking, report_label: "Additional marker masking",
+           rule: {column: image_masked_pct_max, op: gt,
+                  value_from: border_only_masked_pct}}
+
+    - key: image_crop_confidence
+      report_label: "Joint localization confidence"
+      scopes: [robustness]
+      source: imaging
+      partition: true
+      note: >-
+        crop_confidence is 1.0 exactly whenever crop_method is center_default and
+        below 1.0 whenever it is intensity_profile; the two columns are the SAME
+        partition on every split (1:1 on all 6,071 preprocessed images), so this
+        family and image_crop_method carry identical masks and are reported
+        together only because the editor named image quality and localization
+        separately. Post hoc under D35.
+      levels:
+        - {key: full_confidence, report_label: "Confidence 1.0",
+           rule: {column: image_crop_confidence_min, op: ge, value: 1.0}}
+        - {key: reduced_confidence, report_label: "Confidence below 1.0",
+           rule: {column: image_crop_confidence_min, op: lt, value: 1.0}}
+
+    - key: image_crop_method
+      report_label: "Joint localization method"
+      scopes: [robustness]
+      source: imaging
+      partition: true
+      note: >-
+        BADLY IMBALANCED AND REPORTED AS SUCH: intensity_profile localization was
+        used on 86 of 6,071 preprocessed images overall and on 17 of 1,216 test
+        images (16 test patients under the all_crops scope). No partition of this
+        family can put 50 events in the intensity_profile level, so its
+        suppression is arithmetically forced rather than a shortfall of effort.
+        Identical mask to image_crop_confidence. Post hoc under D35.
+      levels:
+        - {key: center_default_only, report_label: "Center default only",
+           rule: {column: image_crop_method_any_intensity_profile, op: is_false}}
+        - {key: any_intensity_profile, report_label: "Any intensity profile",
+           rule: {column: image_crop_method_any_intensity_profile, op: is_true}}
+
+    - key: image_inverted
+      report_label: "Photometric inversion applied"
+      scopes: [robustness]
+      source: imaging
+      partition: true
+      note: >-
+        inverted records that the preprocessing corrected a MONOCHROME1
+        presentation so bone reads bright. Post hoc under D35.
+      levels:
+        - {key: not_inverted, report_label: "No inversion",
+           rule: {column: image_inverted_any, op: is_false}}
+        - {key: inverted, report_label: "Inversion applied",
+           rule: {column: image_inverted_any, op: is_true}}
+
+    - key: image_half_selected
+      report_label: "Bilateral half selection"
+      scopes: [robustness]
+      source: imaging
+      partition: true
+      note: >-
+        half_selected records that a bilateral film was cut at a 2% midline inset
+        to keep the contralateral knee only. It is 'none' only for films already
+        showing one knee, which on the test split is 33 of 740 patients under the
+        all_crops scope, so the unexposed level cannot reach the event floor. The
+        half-select is driven by the model-inferred horizontal_flip annotation,
+        which the protocol section 23(i) review has not yet validated (D22). Post
+        hoc under D35.
+      levels:
+        - {key: no_half_select, report_label: "No half selection",
+           rule: {column: image_half_selected_any, op: is_false}}
+        - {key: half_selected, report_label: "Half selection applied",
+           rule: {column: image_half_selected_any, op: is_true}}
+
+  # Fraction of a finished 512x512 crop occupied by the 31-px border band alone:
+  # (512^2 - 450^2) / 512^2 = 0.2275 to the 4 decimals preprocess_labels.csv
+  # stores. A patient at or below this floor had NO marker or text masking.
+  border_only_masked_pct: 0.2275
+
+  # Editor-requested imaging strata that CANNOT be built from these data. Written
+  # to outputs/tables/v6_robustness_metadata_availability.csv so the request is
+  # answered explicitly rather than dropped in silence.
+  unavailable_strata:
+    # The second clause states what is MISSING as a class, not what was released.
+    # It used to end "the image metadata carries only StudyDate_anon, ... and
+    # dicom_path", naming six of the nineteen columns image.parquet actually holds.
+    # That understated the delivery and contradicted three other statements in this
+    # package: L_KLG_inference / R_KLG_inference are the source of klg_contra (the M1
+    # predictor and the within-grade stratifier, src/features_clinical.py:157-158),
+    # and weight_bearing / inverted are two of the robustness strata reported below.
+    # The VERDICT is unchanged and correct: a case-insensitive scan of every column
+    # name and every value of derived-data/source-parquet/image.parquet and of
+    # metadata-files/MRKR_image_metadata.csv (503,261 rows x 19 identical columns) for
+    # manufact|model|serial|station|institut|kvp|exposure|current|thick returns zero
+    # hits, so the acquisition-parameter class is empty rather than sparse.
+    - {key: equipment, report_label: "Equipment / device model",
+       reason: "MRKR released no DICOM equipment tags. ManufacturerModelName, DeviceSerialNumber and StationName are absent from every delivered table; a case-insensitive search of image.parquet and of the identical MRKR_image_metadata.csv for manufacturer, model, serial number, station, institution, kVp, exposure, tube current and slice thickness returns no matching column at all, so what is missing is the acquisition-parameter class and not the image metadata as a whole. Of the 19 columns those files do carry, none records how the radiograph was acquired; laterality, view_position, weight_bearing, inverted, horizontal_flip, arthroplasty, L_KLG_inference and R_KLG_inference are all released and are used elsewhere in this package."}
+    - {key: manufacturer, report_label: "Manufacturer",
+       reason: "MRKR released no Manufacturer tag. Not recoverable: the 34.85 GB source DICOM set is no longer held, and the retained artefacts are 512x512 preprocessed crops with the border band zeroed."}
+    - {key: site, report_label: "Acquisition site or institution",
+       reason: "MRKR released no InstitutionName or InstitutionalDepartmentName tag, and no site identifier appears in any delivered table. Site cannot be approximated from patient identifiers, which are de-identified surrogates."}
+    - {key: horizontal_flip, report_label: "Horizontal flip correction",
+       reason: "Described, not charted. On the test split horizontal_flip is set on 63 images, one per patient, all frontal, carrying 7 events in total. 7 events cannot clear the 50-event floor under any partition, so no stratum-level estimate exists and none is offered; the flag is reported as a count and as a limitation on the laterality annotation instead."}
+
 # ---- Feasibility go/no-go floors (preliminary descriptive benchmark) --------
 floors:
   primary_events_min: 500
@@ -404,7 +750,7 @@ transfer:
   expected_n_files: 6122
   manifest_paths: "outputs/tables/image_transfer_manifest_paths.txt"
   batch_file: "derived-data/cohort/globus_batch.txt"
-  dest_root: "/path/to/your/DICOMs-knee-imaging"
+  dest_root: "/Users/samersalman/Library/CloudStorage/GoogleDrive-samer.salman2021@gmail.com/My Drive/Radiographic Prediction of Contralateral Knee Arthroplasty/DICOMs-knee-imaging"
   verify_report_md: "outputs/transfer_verification.md"
   dicom_suffix: ".dcm"
   min_file_bytes: 1024                   # anything smaller is a truncated/partial transfer
@@ -467,8 +813,17 @@ preprocess:
                                          # override the centred box (observed median 0.21)
   min_crop_confidence: 0.10              # retained for the Localization contract / T5 detector
   # Protocol section 13: record the percentage of masked pixels and EXCLUDE crops with
-  # excessive masking. The border band alone is a fixed
-  # 1 - (1 - 2*mask_border_frac)^2 = 22.75% of the output; square_crop padding adds more.
+  # excessive masking. The border band alone is a fixed 22.75% of the output, and the
+  # derivation is the INTEGER band the pipeline actually zeroes:
+  #   1 - ((out_size - 2*round(mask_border_frac*out_size)) / out_size)^2
+  #     = 1 - (450/512)^2 = 0.2275238 = 22.75%
+  # NOT the continuous 1 - (1 - 2*mask_border_frac)^2, which gives 0.2256 = 22.56% and was
+  # the expression printed beside this number here until 2026-08-11. round(0.06*512) = 31,
+  # against 0.06 x 512 = 30.72, and that is the whole difference. 22.75 is what the
+  # pipeline records as masked_pct, what outputs/tables/interp_regions.csv carries as
+  # border_band_area_fraction (0.227524), and what Figure 1's caption prints; a manuscript
+  # writer mining this file for prose must carry the integer form. Padding adds more on
+  # top, from square_crop.
   # 0.35 was chosen from synthetic geometry and cut 19.2% of real TRAIN images; the real
   # distribution is p50 0.264 / p90 0.400 / p95 0.439, so 0.45 sits just above p95 and
   # excludes 4.5% — genuinely mispositioned crops rather than ordinary ones.
@@ -614,13 +969,21 @@ model_image:
     # be swept up by a stray --split test; keeping it out of reach is a second lock
     # behind forbid_test_split below rather than a replacement for it.
     # THIS KEY IS READ, and editing it changes a sealed-split figure render.
-    # src/manuscript_figures.py:172 maps the rendered split onto shard_dir or
-    # test_shard_dir (SHARD_DIR_KEY), and figure 1's crop-side anchor check (:1013) opens
-    # labels.csv underneath the resolved tree to count the sealed split's crops. Point it
-    # at the wrong tree and that check fails rather than drawing a wrong number.
+    # EVERY CITATION BELOW NAMES A SYMBOL, and the line number beside it is an aid, not the
+    # reference: re-resolve by searching for the symbol. All were re-resolved 2026-08-11
+    # against modules rewritten that day.
+    #   src/manuscript_figures.py :: SHARD_DIR_KEY (:172) maps the rendered split onto
+    #   shard_dir or test_shard_dir, and _crop_label_index (:1654) opens labels.csv
+    #   underneath the resolved tree. The crop-side anchor check that consumes it is in
+    #   _flow_boxes (:1557-1570) and belongs to the COHORT-FLOW figure, which is
+    #   Supplementary Figure S2 at v6 and was figure 1 at v5; the comment here said
+    #   "figure 1's" and cited :1013, which is inside figure 2's caption context.
+    # Point the key at the wrong tree and that check fails rather than drawing a wrong
+    # number.
     # src/score_test.py is the exception: it still takes the tree as a REQUIRED --shard-dir
-    # argument (src/score_test.py:205) and never consults the config, so the value here and
-    # the operator's command line have to be kept in agreement by hand.
+    # argument (its argparse, src/score_test.py:218; the previously cited :205 is a savez
+    # keyword) and never consults the config, so the value here and the operator's command
+    # line have to be kept in agreement by hand.
     test_shard_dir: "${HOME}/mrkr-shards-test"
     cache_dir: "${HOME}/mrkr-cache"
     checkpoint_dir: "${HOME}/mrkr-ckpt"
@@ -759,9 +1122,12 @@ manuscript:
   # This is NOT an unsealing switch. The sealed read is a completed, recorded event; the
   # three forbid_test_split flags above still guard every module that must never touch
   # the test split.
-  # BOTH manuscript modules take a --split {val,test} flag that DEFAULTS from this key:
-  # src/make_manuscript.py:4409 and src/manuscript_figures.py:2708. This key is therefore
-  # the default, not the only control, and a one-off validation render needs no config edit.
+  # BOTH manuscript modules take a --split {val,test} flag that DEFAULTS from this key.
+  # SEARCH FOR THE SYMBOL, not the offset: it is the `ap.add_argument("--split", ...)` call
+  # in each module's main() - src/make_manuscript.py:4735 and src/manuscript_figures.py:4867
+  # as of 2026-08-11. The figure module's was cited as :2755 by an agent that re-stamped a
+  # stale number without re-resolving it; that line is inside _nb_panel_b and always was.
+  # This key is the default, not the only control; a validation render needs no config edit.
   #
   # There is no rollback that reproduces v1, and the instruction that claimed one has been
   # removed rather than left to be found by an operator. v2 rewrote the prose of every
@@ -799,7 +1165,9 @@ manuscript:
   # Methods plus Results only, and it is now exactly the sum of the Methods and Results
   # entries of section_target_words below. What is checked, and where: verify() compares
   # ONLY this combined target with the rendered Methods plus Results
-  # (src/make_manuscript.py:4187-4199); target_words_methods and target_words_results are
+  # (the "---- word count ----" block of src/make_manuscript.py::verify, :4512-4525 as of
+  # 2026-08-11; search for the block comment, not the offset - the module grew 116 lines on
+  # 2026-08-11 and every earlier offset into it moved); target_words_methods and target_words_results are
   # printed there but never checked. section_target_words is read by no render module, but
   # it IS checked against rendered text, by
   # tests/test_make_manuscript.py::test_every_section_of_the_reported_split_is_within_its_budget,

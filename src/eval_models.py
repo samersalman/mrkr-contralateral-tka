@@ -150,6 +150,11 @@ from src.model_clinical import (  # the REAL estimators, re-exported by train_mo
     load_development_frame,
     percentile_ci,
 )
+from src.subgroups import (  # the ONE subgroup-family declaration and its parser
+    Family,
+    family_mask,
+    load_families,
+)
 from src.train_model import (  # numeric primitives: imported, never reimplemented
     EDGES,
     EXPECTED_DEV_PATIENTS_WITH_CROPS,
@@ -1083,33 +1088,20 @@ def subgroup_levels(cfg: Config, frame: pd.DataFrame) -> list[tuple[str, str, np
     """(subgroup, level, boolean mask over the roster) for every pre-specified stratum.
 
     The families are exactly ``src/subgroups.py``'s - sex, age at index, race, obesity,
-    weight-bearing frontal radiograph and view set - read from the same ``subgroups:``
-    config block, so the cohort description and the equity audit cannot drift apart. Names
-    are the reviewer-facing ones; no underscores reach a table.
+    weight-bearing frontal radiograph and view set - because BOTH modules now read the one
+    declaration at ``config/feasibility.yaml -> subgroups.families``, so the cohort
+    description and the equity audit cannot drift apart. Before 2026-08-11 the two lists
+    were written out twice, here and at ``subgroups.build_rows``, and agreement was a
+    convention rather than a fact.
+
+    ``src.subgroups.load_families(cfg, "equity")`` refuses to return anything but the six
+    original families, in the original order, because this list is the row set of the
+    PUBLISHED ``{val,test}_subgroups.csv``. A seventh family belongs in scope
+    ``robustness`` (:func:`build_imaging_robustness`), which writes new ``v6_`` files.
+    Names are the reviewer-facing ones; no underscores reach a table.
     """
-    sg = cfg["subgroups"]
-    cut = int(sg["age_cutoff"])
-    rg = sg["race_groups"]
-    sex, race = frame[sg["sex_col"]], frame[sg["race_col"]]
-    age = frame["age_at_index"]
-    obese = frame[sg["obesity_flag"]]
-    wb = frame["weight_bearing_frontal"]
-    views = frame["view_set"].astype(str)
-    return [
-        ("Sex", "Female", (sex == "Female").to_numpy()),
-        ("Sex", "Male", (sex == "Male").to_numpy()),
-        ("Age group", f"Under {cut} years", (age < cut).to_numpy()),
-        ("Age group", f"{cut} years or older", (age >= cut).to_numpy()),
-        ("Race group", "Black", (race == rg["black"]).to_numpy()),
-        ("Race group", "White", (race == rg["white"]).to_numpy()),
-        ("Race group", "Asian", (race == rg["asian"]).to_numpy()),
-        ("Obesity", "Yes", (obese == 1).to_numpy()),
-        ("Obesity", "No", (obese == 0).to_numpy()),
-        ("Frontal radiograph technique", "Weight bearing", (wb == True).to_numpy()),   # noqa: E712
-        ("Frontal radiograph technique", "Non weight bearing", (wb == False).to_numpy()),  # noqa: E712
-        ("Imaging views", "Frontal only", (views == "frontal").to_numpy()),
-        ("Imaging views", "Multiple views", (views != "frontal").to_numpy()),
-    ]
+    return [(fam.report_label, lv.report_label, family_mask(lv.rule, frame, cfg))
+            for fam in load_families(cfg, "equity") for lv in fam.levels]
 
 
 def build_subgroups(cfg: Config, roster: Roster, scores: ArmScores | None,
@@ -1175,6 +1167,452 @@ def build_subgroups(cfg: Config, roster: Roster, scores: ArmScores | None,
                  str(r["subgroup"]), str(r["level"]), thresh, int(r["n_events"]),
                  int(r["n_patients"]), 100.0 * int(r["n_patients"]) / max(n_scored, 1), n_scored)
     return df
+
+
+# =========================================================================== #
+# 7a2. V6 REVISION - IMAGING ROBUSTNESS STRATA (A3)                            #
+#                                                                              #
+# The academic editor asked for performance "by weight-bearing status,         #
+# acquisition year, view availability, image quality, laterality source, and   #
+# equipment or site when metadata permit". Weight-bearing and view availability #
+# are already in the equity table above. This section adds acquisition era,     #
+# image quality (masking, localization confidence, localization method,         #
+# photometric inversion, bilateral half-selection) and laterality source, and   #
+# records in a table of its own that equipment, manufacturer and site are NOT   #
+# in these data at all - MRKR released no such DICOM tag and the source DICOMs  #
+# are gone. A request that cannot be met is answered, not dropped.             #
+#                                                                              #
+# THREE things this section does NOT do:                                        #
+#   * it does not touch the published {val,test}_subgroups.csv. Every output    #
+#     here is namespaced v6_ and the write path asserts it.                     #
+#   * it does not weaken the protocol section-21 50-event floor. The same       #
+#     constant, the same assertion and the same suppression semantics as        #
+#     build_subgroups above. Most of these strata suppress, several of them     #
+#     provably-unavoidably, and that is reported as the result.                 #
+#   * it does not add a family to the equity scope. load_families refuses it.   #
+# =========================================================================== #
+V6_POSTHOC_NOTE = ("POST HOC EXPLORATORY (deviation D35): specified after the single "
+                   "permitted read of the sealed test split, not before it")
+
+#: The arms the robustness table is built for. ``m2_frontal`` first because the revision's
+#: central claim is about the single frontal view; ``m4_fusion`` second because it is the
+#: arm the published equity table used, which makes the weight-bearing and view rows here
+#: directly checkable against ``outputs/tables/test_subgroups.csv``.
+V6_ROBUSTNESS_ARMS = ("m2_frontal", "m4_fusion")
+
+#: A per-patient image attribute can be read off every crop the pipeline wrote for that
+#: patient, or off the frontal crop alone. Neither is "the" right choice, so both are
+#: reported and the table carries the scope on every row.
+#:
+#: ``all_crops``    - the union the multi-view arms actually see; a patient is exposed if
+#:                    ANY of their crops carries the flag. Partitions cleanly (740 of the
+#:                    741 test roster patients have at least one crop).
+#: ``frontal_only`` - the single image ``m2_frontal``, ``m4_frontal`` and
+#:                    ``r1_densenet_frontal`` read. Unconfounded by view availability,
+#:                    which matters most for the masking family; costs the 7 test patients
+#:                    who have no frontal crop.
+IMAGE_SCOPES = ("all_crops", "frontal_only")
+
+#: Pre-declared width at which a 95% interval is flagged wide, carried over unchanged from
+#: the A1/A2 module so one revision does not use two definitions: 0.15 is the top of the
+#: range spanned by the six published test-split subgroup estimates that cleared the same
+#: floor (0.101 to 0.160 in outputs/tables/test_subgroups.csv). A flagged cell is no more
+#: precise than the least precise subgroup the paper already reports.
+WIDE_INTERVAL_WIDTH = 0.15
+
+#: Both metrics are reported for every level, and the second one is not decoration.
+#: The IPCW cumulative/dynamic AUROC at 1,825 days compares patients with an event by the
+#: horizon against patients observed EVENT-FREE BEYOND it, and only 162 of the 741 test
+#: patients reach 1,826 days. Acquisition date and laterality source are almost perfectly
+#: collinear with follow-up length in this cohort, so several of the strata the editor
+#: asked for hold zero such controls and have NO 5-year AUROC at all - not a wide one, none.
+#: Harrell C is horizon free and is estimable there, so reporting it is the difference
+#: between answering the question and reporting a blank cell.
+ROBUSTNESS_METRICS = (PRIMARY_METRIC, "harrell_c")
+
+HARRELL_C_NOTE = ("Harrell C is horizon free; horizon_days carries the primary horizon "
+                  "only because the schema has one column for it, not as a claim")
+
+ROBUSTNESS_COLUMNS = ["arm", "family", "subgroup", "level", "image_scope", "metric",
+                      "horizon_days", "n_patients", "n_events", "n_cases_by_horizon",
+                      "n_controls_beyond_horizon", "estimate", "ci_lo", "ci_hi", "ci_width",
+                      "wide_interval", "suppressed", "suppression_reason", "note"]
+
+METADATA_AVAILABILITY_COLUMNS = ["stratum", "requested_by", "available", "reason"]
+
+V6_ROBUSTNESS_BASENAMES = {
+    "strata": "v6_robustness_strata.csv",
+    "availability": "v6_robustness_metadata_availability.csv",
+}
+
+
+def patient_image_attributes(cfg: Config, scope: str, log: logging.Logger) -> pd.DataFrame:
+    """One row per patient of per-image quality flags, aggregated under ``scope``.
+
+    ``derived-data/cohort/preprocess_labels.csv`` is PER IMAGE (6,071 rows over 3,706
+    patients; 3 final-cohort patients have no row because their preprocessing failed).
+    Every aggregation here is the worst case over the patient's crops, because these are
+    contamination-style flags and a patient is exposed if any image the model reads is:
+
+    ``image_masked_pct_max``                     max masked fraction  (worst)
+    ``image_crop_confidence_min``                min localization confidence (worst)
+    ``image_crop_method_any_intensity_profile``  any fallback localization
+    ``image_inverted_any``                       any photometric inversion applied
+    ``image_half_selected_any``                  any bilateral film cut at the midline
+
+    Read-only. The index is ``empi_anon`` as a string, which is the roster's join key.
+    """
+    assert scope in IMAGE_SCOPES, f"unknown image scope {scope!r}; known {IMAGE_SCOPES}"
+    path = cfg.path(cfg["paths"]["cohort_dir"]) / "preprocess_labels.csv"
+    assert path.exists(), f"{path} is missing; the image-quality strata need the per-image flags"
+    pl = pd.read_csv(path)
+    pl["empi_anon"] = pl["empi_anon"].astype(str)
+    n_all = len(pl)
+    if scope == "frontal_only":
+        pl = pl[pl["view"] == "frontal"]
+    g = pl.groupby("empi_anon")
+    out = pd.DataFrame({
+        "image_masked_pct_max": g["masked_pct"].max(),
+        "image_crop_confidence_min": g["crop_confidence"].min(),
+        "image_crop_method_any_intensity_profile":
+            g["crop_method"].apply(lambda s: bool((s == "intensity_profile").any())),
+        "image_inverted_any": g["inverted"].max().astype(bool),
+        "image_half_selected_any":
+            g["half_selected"].apply(lambda s: bool((s.astype(str) != "none").any())),
+        "n_crops_in_scope": g.size(),
+    })
+    log.info("image attributes | scope %s: %d of %d preprocessed images over %d patients",
+             scope, len(pl), n_all, len(out))
+    return out
+
+
+def robustness_frame(cfg: Config, roster: Roster, scope: str,
+                     log: logging.Logger) -> pd.DataFrame:
+    """The roster frame plus every column a ``robustness`` family rule can name.
+
+    Two joins, both one-to-one on ``empi_anon`` and both left joins onto the roster so the
+    row order is the roster's and stays the row order every mask indexes into:
+
+    * ``acquisition_year`` from ``final_cohort.study_date``. **That column derives from
+      image ``StudyDate_anon``, which carries a PER-PATIENT RANDOM SHIFT** (see
+      ``src/inventory.py`` and ``outputs/data_quality_report.md``: "Absolute calendar dates
+      are meaningless, but within-patient day intervals are valid"), and protocol section
+      17's written confirmation that de-identified dates are comparable across patients has
+      never been obtained (deviation D17). The caveat rides into the output on the era
+      families' ``note``; it is repeated here so it cannot be lost by a caller.
+    * the per-image quality flags, aggregated by :func:`patient_image_attributes`.
+
+    ``side_source`` is already on the roster frame, so laterality source needs no join.
+    """
+    frame = roster.frame.reset_index(drop=True).copy()
+    frame["empi_anon"] = frame["empi_anon"].astype(str)
+    coh = cfg.path(cfg["paths"]["cohort_dir"])
+
+    fcoh = pd.read_parquet(coh / "final_cohort.parquet", columns=["empi_anon", "study_date",
+                                                                  "side_source"])
+    fcoh["empi_anon"] = fcoh["empi_anon"].astype(str)
+    assert fcoh["empi_anon"].is_unique, "final_cohort.parquet is not one row per patient"
+    year = pd.to_datetime(fcoh["study_date"]).dt.year
+    ymap = dict(zip(fcoh["empi_anon"], year))
+    frame["acquisition_year"] = frame["empi_anon"].map(ymap).astype("Float64")
+    assert frame["acquisition_year"].notna().all(), (
+        "a roster patient has no study_date in final_cohort.parquet; the era stratum would "
+        "silently drop them into no level at all")
+    # side_source travels on the clinical feature table AND on final_cohort. They must agree,
+    # or the laterality-source stratum means two different things depending on the source.
+    smap = dict(zip(fcoh["empi_anon"], fcoh["side_source"]))
+    assert (frame["empi_anon"].map(smap) == frame["side_source"]).all(), (
+        "side_source disagrees between features_clinical.parquet and final_cohort.parquet")
+
+    attrs = patient_image_attributes(cfg, scope, log)
+    for col in attrs.columns:
+        frame[col] = frame["empi_anon"].map(attrs[col])
+    n_missing = int(frame["n_crops_in_scope"].isna().sum())
+    log.info("robustness frame | scope %s: %d roster patients, %d with no crop in scope "
+             "(they satisfy no image-quality level and are reported as such)",
+             scope, len(frame), n_missing)
+    return frame
+
+
+def build_imaging_robustness(cfg: Config, roster: Roster, arms: dict[str, ArmScores],
+                             engine: BootstrapEngine, horizon: int,
+                             log: logging.Logger) -> pd.DataFrame:
+    """The A3 table: every ``robustness`` family, every declared arm, both image scopes.
+
+    The estimator, the floor and the suppression semantics are exactly
+    :func:`build_subgroups`'s - same constant, same assertion, same reason string - because
+    a robustness stratum that used a different rule from the equity audit would not be
+    comparable with it. ``source: clinical`` families do not depend on the image scope, so
+    they are emitted once with ``image_scope='not applicable'`` instead of twice.
+
+    **How many strata suppress is a property of the data.** The test split carries 106
+    events, so at most two levels of any partition can clear a 50-event floor and a
+    three-level scheme can never leave three. Where a level's suppression is arithmetically
+    forced rather than a shortfall of effort, the family's config ``note`` says so.
+    """
+    thresh = int(cfg["model_eval"]["suppress_below_events"])
+    assert thresh == SUPPRESS_BELOW_EVENTS, (
+        f"model_eval.suppress_below_events is {thresh}, but protocol section 21 (and "
+        f"src/model_clinical.SUPPRESS_BELOW_EVENTS) fixes it at {SUPPRESS_BELOW_EVENTS}")
+    families = load_families(cfg, "robustness")
+    frames = {scope: robustness_frame(cfg, roster, scope, log) for scope in IMAGE_SCOPES}
+
+    rows: list[dict] = []
+    for arm in V6_ROBUSTNESS_ARMS:
+        scores = arms.get(arm)
+        assert scores is not None, f"{arm} is not scored; the robustness table needs it"
+        for fam in families:
+            scopes = IMAGE_SCOPES if fam.source == "imaging" else ("not applicable",)
+            for scope in scopes:
+                frame = frames[scope] if fam.source == "imaging" else frames[IMAGE_SCOPES[0]]
+                for lv in fam.levels:
+                    m = family_mask(lv.rule, frame, cfg) & scores.present
+                    for metric in ROBUSTNESS_METRICS:
+                        rows.append(_robustness_row(fam, lv, arm, scope, m, roster, scores,
+                                                    engine, horizon, thresh, metric))
+    df = pd.DataFrame(rows, columns=ROBUSTNESS_COLUMNS)
+    n_supp = int(df["suppressed"].sum())
+    log.info("v6 robustness: %d row(s) over %d famil(ies) x %d arm(s) x %d metric(s); "
+             "%d suppressed, %d estimated, %d of those flagged wide (>= %.2f)",
+             len(df), len(families), len(V6_ROBUSTNESS_ARMS), len(ROBUSTNESS_METRICS),
+             n_supp, len(df) - n_supp, int(df["wide_interval"].sum()), WIDE_INTERVAL_WIDTH)
+    n_floor = int(df["suppression_reason"].str.startswith("protocol section 21").sum())
+    n_nocontrol = int(df["suppression_reason"].str.startswith("not estimable").sum())
+    log.info("  of the %d suppressed rows, %d fail the %d-event floor and %d clear it but "
+             "have no estimable metric (no control observed beyond the horizon)",
+             n_supp, n_floor, thresh, n_nocontrol)
+    for _, r in df[~df["suppressed"].astype(bool)].iterrows():
+        log.info("  CLEARED %-11s %-9s %-46s %-15s n=%-4d ev=%-4d %.3f (%.3f to %.3f)%s",
+                 r["arm"], r["metric"], f"{r['subgroup']} / {r['level']}", r["image_scope"],
+                 int(r["n_patients"]), int(r["n_events"]), r["estimate"], r["ci_lo"],
+                 r["ci_hi"], "  WIDE" if r["wide_interval"] else "")
+    return df
+
+
+def _robustness_row(fam: Family, lv, arm: str, scope: str, m: np.ndarray, roster: Roster,
+                    scores: ArmScores, engine: BootstrapEngine, horizon: int,
+                    thresh: int, metric: str) -> dict:
+    """One robustness cell. Split out so the floor is applied in exactly one place.
+
+    Two ways a cell fails to produce a number, and they are NOT the same thing:
+
+    1. **The protocol section-21 floor.** Fewer than ``thresh`` events in the level. Same
+       constant, same wording as :func:`build_subgroups`.
+    2. **The estimator has nothing to work with.** The IPCW AUROC at the horizon needs at
+       least one case (event by the horizon) AND at least one control (observed event-free
+       beyond it). The test split holds 162 controls in total, and acquisition date and
+       laterality source are nearly collinear with follow-up length here, so several levels
+       clear the event floor and still have no 5-year AUROC. That is reported with its own
+       reason string and its own counts, never as a blank cell or as a wide interval.
+    """
+    key = f"{PRIMARY_METRIC}@{horizon}" if metric == PRIMARY_METRIC else metric
+    n_pat, n_ev = int(m.sum()), int(roster.event[m].sum())
+    t, e = roster.time[m], roster.event[m]
+    n_case = int(((t <= horizon) & (e == 1)).sum())
+    n_ctrl = int((t > horizon).sum())
+    estimate = lo = hi = width = float("nan")
+    suppressed, reason = True, ""
+    if n_ev < thresh:
+        reason = f"protocol section 21: fewer than {thresh} events ({n_ev} in this level)"
+    elif metric == PRIMARY_METRIC and (n_case == 0 or n_ctrl == 0):
+        reason = (f"not estimable: the IPCW AUROC at {horizon} d compares patients with an "
+                  f"event by {horizon} days against patients observed event-free beyond it, "
+                  f"and this level holds {n_case} of the former and {n_ctrl} of the latter. "
+                  f"This is undefined, not imprecise; read the horizon-free Harrell C row")
+    else:
+        estimate = engine.point(scores, m)[key]
+        lo, hi = percentile_ci(engine.boot(scores, m)[key])
+        if not np.isfinite(estimate):
+            reason = (f"not estimable: {key} returned no value on this level's "
+                      f"{n_pat} patients ({n_case} case(s), {n_ctrl} control(s))")
+        else:
+            suppressed = False
+            width = float(hi - lo)
+    wide = bool(np.isfinite(width) and width >= WIDE_INTERVAL_WIDTH)
+    note = V6_POSTHOC_NOTE if not fam.note else f"{fam.note} | {V6_POSTHOC_NOTE}"
+    if metric == "harrell_c":
+        note = f"{note} | {HARRELL_C_NOTE}"
+    elif not suppressed:
+        # Stated on every estimated AUROC row rather than behind a threshold nobody
+        # declared: a 5-year AUROC resting on 94 cases and 3 controls is arithmetically
+        # defined and substantively empty, and only these two counts show that.
+        note = (f"{note} | estimated on {n_case} case(s) with an event by {horizon} d "
+                f"against {n_ctrl} control(s) observed event-free beyond it")
+    if wide:
+        note = (f"{note} | WIDE INTERVAL: the 95% interval spans {width:.3f}, at or above "
+                f"the pre-declared {WIDE_INTERVAL_WIDTH:.2f} flag")
+    return dict(arm=arm, family=fam.key, subgroup=fam.report_label, level=lv.report_label,
+                image_scope=scope, metric=metric, horizon_days=int(horizon),
+                n_patients=n_pat, n_events=n_ev, n_cases_by_horizon=n_case,
+                n_controls_beyond_horizon=n_ctrl, estimate=estimate, ci_lo=lo, ci_hi=hi,
+                ci_width=width, wide_interval=wide, suppressed=bool(suppressed),
+                suppression_reason=reason, note=note)
+
+
+def build_metadata_availability(cfg: Config) -> pd.DataFrame:
+    """The editor's requested strata that these data cannot supply, stated rather than dropped.
+
+    Equipment, manufacturer and site are not "not run": MRKR never released those DICOM
+    tags, the 34.85 GB source DICOM set is no longer held, and the retained artefacts are
+    512x512 preprocessed crops with the border band zeroed, so they are not recoverable by
+    any amount of further work. ``horizontal_flip`` is a fourth case again: the flag exists
+    and is described, but on the test split it marks 63 images, one per patient, carrying 7
+    events in total, so no stratum-level estimate can exist under the 50-event floor.
+    """
+    rows = [dict(stratum=str(u["report_label"]),
+                 requested_by="academic editor, imaging robustness",
+                 available=False, reason=str(u["reason"]))
+            for u in cfg["subgroups"]["unavailable_strata"]]
+    return pd.DataFrame(rows, columns=METADATA_AVAILABILITY_COLUMNS)
+
+
+# =========================================================================== #
+# 7a3. V6 REVISION - LEARNING CURVES (A4, supplementary figure S1)             #
+#                                                                              #
+# THE TRAP THIS SECTION EXISTS TO DEFUSE. ``val_overfit_gap`` in               #
+# {val,test}_convergence.csv is NOT a train-validation gap. It is              #
+# val_nll[last] - min(val_nll) (convergence_diagnostics, above), and since     #
+# early stopping runs at patience=8 the last epoch is ALWAYS exactly 8 epochs  #
+# past the checkpoint that was kept. So it measures how far training ran after #
+# the retained model, and a figure that plots it unmarked reads as "the model  #
+# we kept was diverging". Every row here carries is_retained_epoch, and the    #
+# per-seed summary reports the gap AT the retained checkpoint separately.      #
+# =========================================================================== #
+LEARNING_CURVE_COLUMNS = ["arm", "seed", "epoch", "train_nll", "val_nll", "train_val_gap",
+                          "val_nll_above_own_min", "lr", "secs", "improved",
+                          "is_retained_epoch", "epochs_from_retained", "n_epochs_run", "note"]
+
+LEARNING_CURVE_SEED_COLUMNS = ["arm", "seed", "n_epochs_run", "retained_epoch", "last_epoch",
+                               "epochs_after_retained", "train_nll_at_retained",
+                               "val_nll_at_retained", "gap_at_retained", "val_nll_last",
+                               "val_overfit_gap_last_minus_min", "note"]
+
+LEARNING_CURVE_ARM_COLUMNS = ["arm", "n_seeds", "mean_retained_epoch", "mean_epochs_run",
+                              "mean_train_nll_at_retained", "mean_val_nll_at_retained",
+                              "mean_gap_at_retained", "mean_val_overfit_gap",
+                              "convergence_status", "note"]
+
+V6_LEARNING_CURVE_BASENAMES = {
+    "curves": "v6_learning_curves.csv",
+    "per_seed": "v6_learning_curves_by_seed.csv",
+    "per_arm": "v6_learning_curves_by_arm.csv",
+}
+
+#: Why the gap in these tables is a bound and not a measurement. Verified line by line
+#: against src/train_model.py: train_nll is accumulated in ``model.train()`` mode with
+#: dropout 0.3 and augmentation active and averaged across the epoch WHILE the weights
+#: update (``train_one_epoch``); val_nll is one clean ``model.eval()`` pass on the
+#: epoch-end weights (``predict_hazards`` / ``val_nll_of``). All three differences inflate
+#: train_nll, and the gap is val_nll - train_nll, so an inflated train_nll makes the gap
+#: too small.
+TRAIN_VAL_GAP_NOTE = (
+    "LOWER BOUND, not a measured train-validation gap: train_nll is accumulated in "
+    "model.train() mode with dropout 0.3 and augmentation active and averaged across the "
+    "epoch while the weights update, while val_nll is a single clean eval-mode pass on the "
+    "epoch-end weights. All three differences inflate train_nll and the gap is "
+    "val_nll - train_nll, so the true gap is at least this large and by an unknown margin")
+
+#: Why the retained epoch has to be marked on the face of the table.
+RETAINED_EPOCH_NOTE = (
+    "val_overfit_gap in {val,test}_convergence.csv is val_nll[last] - min(val_nll), NOT a "
+    "train-validation gap; at patience=8 the last epoch is always exactly 8 past the "
+    "retained checkpoint, so it measures how far training ran AFTER the model that was "
+    "kept. Use is_retained_epoch / gap_at_retained for the model that was actually scored")
+
+
+def build_learning_curves(cfg: Config, log: logging.Logger
+                          ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Per-epoch, per-seed and per-arm views of ``outputs/tables/train_history.csv``.
+
+    The retained epoch is taken from the trainer's own ``improved`` column - the LAST epoch
+    it marked True, which is exactly the epoch whose weights ``load_seed_model`` restores -
+    and cross-checked against ``argmin(val_nll)``. Deriving it from ``argmin`` alone would
+    be wrong at a tie, because the trainer improves only on ``v_nll < best - 1e-6``.
+    """
+    path = cfg.path(cfg["model_image"]["local"]["history_csv"])
+    assert path.exists(), f"{path} is missing; A4 has no input"
+    patience = int(cfg["model_image"]["early_stopping"]["patience"])
+    max_epochs = int(cfg["model_image"]["max_epochs"])
+    hist = pd.read_csv(path)
+    need = {"arm", "seed", "epoch", "train_nll", "val_nll", "improved"}
+    assert need <= set(hist.columns), f"{path.name} is missing {sorted(need - set(hist.columns))}"
+
+    curves, per_seed = [], []
+    for (arm, seed), g in hist.groupby(["arm", "seed"], sort=False):
+        g = g.sort_values("epoch").reset_index(drop=True)
+        improved = g["improved"].astype(str).str.lower().isin(("true", "1"))
+        assert improved.any(), f"{arm} seed {seed}: no epoch is marked improved"
+        retained = int(g.loc[improved, "epoch"].iloc[-1])
+        vmin = float(g["val_nll"].min())
+        at = g[g["epoch"] == retained].iloc[0]
+        assert abs(float(at["val_nll"]) - vmin) <= 1e-6, (
+            f"{arm} seed {seed}: the last improved epoch ({retained}) is not the validation "
+            f"minimum ({float(at['val_nll'])} vs {vmin}); the retained-epoch rule is wrong")
+        last = int(g["epoch"].iloc[-1])
+        after = last - retained
+        # Training stops either because patience expired or because it hit max_epochs
+        # (train_model.py: complete = bad >= patience or epoch == max_epochs - 1). Every
+        # series in this study stopped on patience, so `after` is always exactly 8 - which
+        # is the whole reason val_overfit_gap is not a train-validation gap.
+        assert after == patience or last == max_epochs - 1, (
+            f"{arm} seed {seed}: training ran {after} epochs past the retained checkpoint, "
+            f"which is neither the configured patience of {patience} nor a max_epochs "
+            f"({max_epochs}) stop")
+        for _, r in g.iterrows():
+            curves.append(dict(
+                arm=str(arm), seed=int(seed), epoch=int(r["epoch"]),
+                train_nll=float(r["train_nll"]), val_nll=float(r["val_nll"]),
+                train_val_gap=float(r["val_nll"]) - float(r["train_nll"]),
+                val_nll_above_own_min=float(r["val_nll"]) - vmin,
+                lr=float(r.get("lr", float("nan"))), secs=float(r.get("secs", float("nan"))),
+                improved=bool(str(r["improved"]).lower() in ("true", "1")),
+                is_retained_epoch=bool(int(r["epoch"]) == retained),
+                epochs_from_retained=int(r["epoch"]) - retained, n_epochs_run=len(g),
+                note=TRAIN_VAL_GAP_NOTE))
+        per_seed.append(dict(
+            arm=str(arm), seed=int(seed), n_epochs_run=len(g), retained_epoch=retained,
+            last_epoch=last, epochs_after_retained=after,
+            train_nll_at_retained=float(at["train_nll"]),
+            val_nll_at_retained=float(at["val_nll"]),
+            gap_at_retained=float(at["val_nll"]) - float(at["train_nll"]),
+            val_nll_last=float(g["val_nll"].iloc[-1]),
+            val_overfit_gap_last_minus_min=float(g["val_nll"].iloc[-1]) - vmin,
+            note=RETAINED_EPOCH_NOTE))
+
+    curves_df = pd.DataFrame(curves, columns=LEARNING_CURVE_COLUMNS)
+    seed_df = pd.DataFrame(per_seed, columns=LEARNING_CURVE_SEED_COLUMNS)
+
+    conv = convergence_diagnostics(cfg, log)
+    status = dict(zip(conv["arm"], conv["status"])) if len(conv) else {}
+    published_gap = dict(zip(conv["arm"], conv["val_overfit_gap"])) if len(conv) else {}
+    arm_rows = []
+    for arm, g in seed_df.groupby("arm", sort=False):
+        mean_gap = float(g["val_overfit_gap_last_minus_min"].mean())
+        if arm in published_gap:
+            assert abs(mean_gap - float(published_gap[arm])) <= 1e-9, (
+                f"{arm}: the mean last-minus-min gap here ({mean_gap}) is not the one "
+                f"convergence_diagnostics computes ({published_gap[arm]}); one of the two "
+                f"is reading train_history.csv wrongly")
+        arm_rows.append(dict(
+            arm=str(arm), n_seeds=int(len(g)),
+            mean_retained_epoch=float(g["retained_epoch"].mean()),
+            mean_epochs_run=float(g["n_epochs_run"].mean()),
+            mean_train_nll_at_retained=float(g["train_nll_at_retained"].mean()),
+            mean_val_nll_at_retained=float(g["val_nll_at_retained"].mean()),
+            mean_gap_at_retained=float(g["gap_at_retained"].mean()),
+            mean_val_overfit_gap=mean_gap,
+            convergence_status=str(status.get(arm, "")),
+            note=f"{TRAIN_VAL_GAP_NOTE} | {RETAINED_EPOCH_NOTE}"))
+    arm_df = pd.DataFrame(arm_rows, columns=LEARNING_CURVE_ARM_COLUMNS)
+
+    log.info("learning curves: %d epoch rows over %d arm x seed series, %d arms",
+             len(curves_df), len(seed_df), len(arm_df))
+    for _, r in arm_df.iterrows():
+        log.info("  %-20s retained epoch %.1f of %.1f run | gap at retained %.4f | "
+                 "last-minus-min %.4f (%s)", r["arm"], r["mean_retained_epoch"],
+                 r["mean_epochs_run"] - 1, r["mean_gap_at_retained"],
+                 r["mean_val_overfit_gap"], r["convergence_status"] or "ok")
+    return curves_df, seed_df, arm_df
 
 
 # =========================================================================== #
@@ -2477,5 +2915,107 @@ def main(argv=None) -> int:                                  # noqa: C901 - one 
     return 0
 
 
+# =========================================================================== #
+# 10. THE V6 REVISION ENTRY POINT - a SEPARATE main, on purpose                #
+#                                                                              #
+# main() above writes the published metrics, comparisons, subgroups,           #
+# convergence and net-benefit tables. A6 and A4 must never be able to touch    #
+# any of those, so they do not share its argument parser, its writers or its   #
+# code path: main_v6 writes only the basenames declared above and asserts it.  #
+#                                                                              #
+#     python -m src.eval_models v6 --config config/feasibility.yaml \          #
+#                                  --out-dir outputs/tables                    #
+# =========================================================================== #
+V6_SUBCOMMAND = "v6"
+
+
+def run_v6(cfg: Config, log: logging.Logger, out_dir: Path,
+           n_boot: int | None = None) -> dict[str, pd.DataFrame]:
+    """Build and write the A3 robustness tables and the A4 learning-curve tables.
+
+    Reads the sealed split. That is not a new read: ``src/score_test.py`` performed the
+    single permitted one and recorded it, and :func:`assert_sealed_read_is_recorded` makes
+    this function refuse to run if that record is absent or the training contract has
+    moved. The bootstrap is the protocol's replicate count on the protocol's seed, i.e.
+    THE SAME DRAW the published tables used, so replicate b here is the same set of
+    patients as replicate b there. Returns the frames so tests can assert on them.
+    """
+    contract = assert_sealed_read_is_recorded(cfg)
+    me = cfg["model_eval"]
+    horizons = horizons_from_config(cfg)
+    horizon = int(me["primary_contrast"]["horizon_days"])
+    assert horizon in horizons
+    coh = cfg.path(cfg["paths"]["cohort_dir"])
+    contracts = FrozenContracts(coh)
+    train_arms = load_train_arms(coh / "train_arms.json")
+    roster, _ = load_roster(contracts, log, split=SEALED_SPLIT)
+
+    arms: dict[str, ArmScores] = {}
+    for arm in V6_ROBUSTNESS_ARMS:
+        summary = (train_arms["arms"] or {}).get(arm)
+        assert summary, f"{arm} is not in train_arms.json; it was never trained"
+        sc = trained_arm_scores(arm, summary, coh, roster, horizons, log, split=SEALED_SPLIT)
+        assert sc is not None, f"{SEALED_SPLIT}_hazards_{arm}.npz is missing"
+        arms[arm] = sc
+
+    n_boot = int(n_boot if n_boot is not None else me["bootstrap_n"])
+    seed = int(me["bootstrap_seed"])
+    draw = bootstrap_draw(len(roster), n_boot, seed)
+    engine = BootstrapEngine(roster, draw, horizons, log)
+    log.info("v6 context: %d test patients, %d events, contract %s, %d replicates (seed %d)",
+             len(roster), int(roster.event.sum()), contract, n_boot, seed)
+
+    curves, per_seed, per_arm = build_learning_curves(cfg, log)
+    tables = {
+        V6_ROBUSTNESS_BASENAMES["strata"]:
+            (build_imaging_robustness(cfg, roster, arms, engine, horizon, log),
+             ROBUSTNESS_COLUMNS),
+        V6_ROBUSTNESS_BASENAMES["availability"]:
+            (build_metadata_availability(cfg), METADATA_AVAILABILITY_COLUMNS),
+        V6_LEARNING_CURVE_BASENAMES["curves"]: (curves, LEARNING_CURVE_COLUMNS),
+        V6_LEARNING_CURVE_BASENAMES["per_seed"]: (per_seed, LEARNING_CURVE_SEED_COLUMNS),
+        V6_LEARNING_CURVE_BASENAMES["per_arm"]: (per_arm, LEARNING_CURVE_ARM_COLUMNS),
+    }
+    allowed = set(V6_ROBUSTNESS_BASENAMES.values()) | set(V6_LEARNING_CURVE_BASENAMES.values())
+    out_dir = Path(out_dir)
+    out: dict[str, pd.DataFrame] = {}
+    for name, (df, cols) in tables.items():
+        assert name in allowed and name.startswith("v6_"), (
+            f"{name} is not a declared v6 output; this entry point may not write over a "
+            f"published table")
+        write_table(out_dir / name, df, cols, roster.pids, name)
+        log.info("wrote %s (%d rows)", out_dir / name, len(df))
+        out[name] = df
+    return out
+
+
+def main_v6(argv=None) -> int:
+    ap = argparse.ArgumentParser(
+        prog="python -m src.eval_models v6",
+        description="v6 Phase-2 analyses A3 (imaging robustness strata) and A4 (learning "
+                    "curves). Writes only v6_* tables; the published tables are untouched.")
+    ap.add_argument("--config", default="config/feasibility.yaml")
+    ap.add_argument("--out-dir", default="outputs/tables")
+    ap.add_argument("--bootstrap-n", type=int, default=None,
+                    help="override model_eval.bootstrap_n for a fast smoke run; the reported "
+                         "tables always use the protocol value unless this is set")
+    args = ap.parse_args(argv)
+    cfg = load_config(args.config)
+    log = setup_logging(cfg.path(cfg["paths"]["run_log"]))
+    log.warning("*** A3 and A4 are POST HOC on the already-read sealed test split "
+                "(deviation D35). The acquisition-era strata carry a SECOND caveat: "
+                "StudyDate_anon has a per-patient random shift and protocol section 17's "
+                "written confirmation of cross-patient date comparability has never been "
+                "obtained (D17). Both caveats are in the note column of every affected "
+                "row. ***")
+    run_v6(cfg, log, Path(args.out_dir), n_boot=args.bootstrap_n)
+    return 0
+
+
 if __name__ == "__main__":
+    # A first positional token of "v6" selects the revision entry point. Anything else -
+    # including no argument at all - runs main() exactly as before, so the published
+    # rendering path is unchanged and cannot be reached by a v6 flag.
+    if len(sys.argv) > 1 and sys.argv[1] == V6_SUBCOMMAND:
+        raise SystemExit(main_v6(sys.argv[2:]))
     raise SystemExit(main())

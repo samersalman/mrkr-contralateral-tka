@@ -759,7 +759,7 @@ def border_band_fraction(out_size: int, mask_border_frac: float) -> float:
 
     Uses the SAME integer band width mask_borders uses, so the number reported is the
     number actually blanked. At out_size 512 and mask_border_frac 0.06 the band is
-    round(0.06 * 512) = 31 px per edge and the fraction is 1 - (450/512)^2 = 0.2276.
+    round(0.06*512) = 31 px per edge and the fraction is 1 - (450/512)^2 = 0.227524, 22.75%.
     """
     n = int(out_size)
     t = int(round(float(mask_border_frac) * n))

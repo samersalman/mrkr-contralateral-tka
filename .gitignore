@@ -19,6 +19,21 @@ outputs/figures/crop_qa_contact_sheet.png
 outputs/logs/run.log
 outputs/manuscript/
 
+# Interpretability artefacts (protocol section 22, added at the v6 revision).
+# The whole directory is pixel data or per-image arrays: 32 attribution panels are
+# real de-identified knee radiographs, regions_overlay.png is a single patient's crop,
+# and mean_frontal_crop.npy is a cohort mean image. src/interpretability.py regenerates
+# every one of them from the shards, so none is needed for code reproducibility.
+outputs/interpretability/
+
+# Per-patient rows produced by the same module. The aggregate interp_ tables
+# (summary, regions, occlusion, view_ablation, attention_*, sanity_checks,
+# risk_provenance) carry no identifiers and ARE committed; these four do.
+outputs/tables/interp_attribution_per_image.csv
+outputs/tables/interp_attribution_registered.csv
+outputs/tables/interp_attribution_sample.csv
+outputs/tables/interp_panel_manifest.csv
+
 # Local noise.
 __pycache__/
 *.pyc
