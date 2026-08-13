@@ -242,79 +242,67 @@ python3 -m src.preprocess_images --dicom-root <DICOM root> --out-dir <test shard
 # 2. Build the crop QA evidence and the reviewer workbooks.
 python3 -m src.crop_qa --dicom-root <DICOM root>
 
-# 2b. Rebuild ONLY the section 23(i) image-audit sample, from explicit shard
-#     sidecars rather than from the (single, last-run-wins) preprocess_run.json.
-python3 -m src.crop_qa --rebuild-image-audit \
-    --backup-workbook image_audit_workbook_v1_20260726.csv \
-    --sidecar <shard dir>/labels.csv --sidecar <test shard dir>/labels.csv
-
-# 3. HUMAN STEP (protocol sections 7 and 23) — two independent reviewers with
-#    orthopedic / MSK imaging experience score >= 400 index images and >= 200
-#    outcome records, the >= 200-patient laterality audit is adjudicated, and a
-#    reviewer signs outputs/crop_qa_checklist.md with Result = PASS.
-python3 -m src.qa_review_app --mode image --reviewer <short name>
-python3 -m src.qa_review_app --mode image --merge --reviewers <r1>,<r2>
-python3 -m src.crop_qa --score derived-data/cohort/image_audit_workbook.csv
+# 3. HUMAN STEP (protocol sections 7 and 23). See the status note below: section 7
+#    was adjudicated on paper, section 23 was declined, and the tooling and
+#    workbooks for both were removed from this repository on 2026-08-12.
 
 # 4. Train in Colab: notebooks/train_and_score_colab.ipynb
 ```
 
-**Steps 1, 2, 2b and 4 have run. Step 3, the human review, has not.**
-`outputs/crop_qa_checklist.md` still carries an empty sign-off block, with no
-reviewer name, no date and a blank `Result`; `outputs/tables/laterality_audit_summary.csv`
-and `outcome_audit_summary.csv` report sampling only, with no adjudication, no raw
-agreement and no Cohen kappa; the 400-image, 200-patient and 200-record workbooks
-are generated and **0% scored** — `outputs/tables/image_audit_summary.csv` does not
-exist because nothing real has been scored. Training and the sealed read were
-performed anyway, on an explicit author instruction recorded in **D28** and **D31**.
-The consequence is that the D2 recovered-index-side cohort, 49.3% of the primary
-cohort, is still unvalidated by a human reviewer, and every test-split number rests
-on that unvalidated index side. **D22** stays open until the review is done.
+**Steps 1, 2 and 4 have run. Step 3 resolved in three different ways, and the
+apparatus for it is no longer in this repository.**
 
-#### The Phase 4 rebuild of the section 23(i) sample
+* **Protocol section 7, the >= 200-patient laterality audit: performed.** The
+  deterministic index-side recovery rule agreed with manual adjudication in **196 of
+  200** sampled development patients, **98.0% (95% CI 95.0 to 99.2, Wilson), a 2.0%
+  observed error rate**. The adjudication was carried out on paper and the per-patient
+  records are held offline, so this figure is **author-attested rather than recomputable
+  from anything released here**. The sample was train 168 / val 32 / **test 0**, so it
+  validates the recovery rule on development patients and does not directly verify the
+  371 test patients whose index side was recovered by rule. It cannot be extended to
+  them: laterality is answerable only from a full film, and the source DICOMs for the
+  test split are gone. Note also that section 7's own pass rule required a perfect match
+  across every row; four rows disagreed, so the 2.0% error rate is reported as a finding
+  rather than as a passed gate, and the cohort lock was not re-opened.
+* **Protocol section 23(i), the 400-image two-reviewer quality and laterality review:
+  declined** by author decision as disproportionate, recorded as **D40**. Not deferred.
+  **CLAIM item 18** and **TRIPOD+AI item 7** remain **No** on that ground.
+* **Protocol section 23(ii), the 200-record outcome audit:** sampled, never adjudicated.
 
-The image-audit sample and the tooling around it were rebuilt on 2026-08-10. Nothing
-was scored; what changed is what a reviewer will be scoring and how.
+`outputs/crop_qa_checklist.md` carries an empty sign-off block and is not signed.
+**D22** is therefore **partial**, not open pending completion: one of its three reviews
+is closed with a reported error rate, one is declined, one remains unadjudicated.
+Training and the sealed read were performed before any of this, on an explicit author
+instruction recorded in **D28** and **D31**.
 
-* **`derived-data/cohort/image_audit_workbook.csv` is now test-inclusive**: 400 rows ×
-  43 columns, **train 273 / val 45 / test 82**, 393 distinct patients. It was previously
-  train 344 / val 56 / **test 0** — `config/feasibility.yaml` had always asked for
-  `audit_splits: ["train","val","test"]`, but the frame was built from a single
-  preprocess sidecar and the 2026-07-29 test run had overwritten the train+val record.
-  The frame is now the union of both shard sidecars, 6,071 crops. Stratification is
-  unchanged (proportional, largest-remainder, over split × view × contra_side ×
-  bilateral/unilateral, seed 20250720, all 24 non-empty strata represented). The 318
-  train+val rows are a strict subset of the original 2026-07-26 sample, which is
-  preserved verbatim at `image_audit_workbook_v1_20260726.csv`, and every previous
-  `P####` assignment in `crop_qa_index_key.csv` is unchanged because the index is burned
-  into the titles of the panel PNGs.
-* **`src/crop_qa.py` gained `--rebuild-image-audit` and repeatable `--sidecar`.**
-  `--rebuild-image-audit` is deliberately narrow: it touches the index key, the workbook,
-  the backup and the missing panels and nothing else. A full `python3 -m src.crop_qa`
-  would re-render the contact sheet, rewrite `outputs/crop_qa_checklist.md` and redraw
-  the other two audits from a DICOM tree that no longer exists. `--sidecar` names the
-  shard label files explicitly; without it the rebuild falls back to `preprocess_run.json`
-  *and* `preprocess_run_test.json`.
-* **`src/qa_review_app.py` (new) is the scoring interface.** A stdlib `http.server` app
-  bound to `127.0.0.1`, offline, resumable, keyboard-driven, that writes one CSV per
-  reviewer under `derived-data/cohort/scores/` (git-ignored) plus an append-only
-  `.jsonl`, flushing before each HTTP response returns. `--mode image|laterality|outcome`,
-  `--status` for progress, `--merge --reviewers r1,r2` to fold per-reviewer files back
-  into the workbook as `<item>_r1` / `<item>_r2`. It records dwell time per panel, so
-  rubber-stamping is auditable.
-* **Verdicts are now three, not two.** `NOT_ASSESSABLE` joins `OK` and `ERROR` and is
-  excluded from the agreement, kappa and critical-error denominators. It exists because
-  **82 of the 400 panels are crop-only**: the 584 pre-existing panels were rendered on
-  2026-07-26 with the full film and the source DICOMs are gone, so the test-split panels
-  show only the finished 512×512 crop. The workbook carries `panel_has_full_film`
-  (318 True / 82 False). Five of the six score items — view, native-knee status, crop
-  adequacy, burned-in text, non-knee content — are decidable from a crop; **laterality is
-  not**, because `standardize_to_left` mirrors right knees and the border mask removes any
-  L/R marker, so a crop is anatomically identical whether the correct or the wrong half was
-  taken. **Half-select will therefore be verifiable on 318 of 400 images, not 400** — this
-  must reach Methods, Limitations and D22.
-* **`--score` now exits non-zero when the gate fails** (2, matching the module's
-  "cannot proceed" convention) instead of exiting 0 after logging the failure.
+**Removed from this repository on 2026-08-12**, at the author's instruction, because the
+adjudication lives on paper and the section 23 review will not be performed:
+`src/qa_review_app.py`; `outputs/tables/laterality_audit_summary.csv` and
+`outcome_audit_summary.csv`; and, under the already git-ignored `derived-data/cohort/`,
+the image, laterality and outcome workbooks, the index key and the QA panel PNGs. Earlier
+versions remain in this repository's history. **`src/crop_qa.py` was deliberately kept**:
+`src/interpretability.py` imports `residual_marker_scan` from it, and that function
+produced the 18.5% residual-marker rate on 1,216 test crops that the paper reports as its
+leakage evidence. Its `--score` path and the workbook-building commands above now have no
+workbook to act on.
+
+#### The section 23(i) sample, and why it is gone
+
+The image-audit sample was rebuilt test-inclusive on 2026-08-10 (400 rows, train 273 /
+val 45 / test 82, from the union of both shard sidecars rather than the single
+last-run-wins `preprocess_run.json`), and a scoring interface was written for it. Both
+were removed on 2026-08-12 when the review was declined. Two findings from that work
+outlived the apparatus and still bear on the paper:
+
+* **Half-select is verifiable on 318 of 400 images, never 400.** The 584 panels rendered
+  on 2026-07-26 carry the full film; the source DICOMs are gone, so the 82 test-split
+  panels show only the finished 512x512 crop. `standardize_to_left` mirrors right knees
+  and the border mask removes any L/R marker, so a crop is anatomically identical whether
+  the correct or the wrong half was taken. Five of the six score items stay decidable
+  from a crop; laterality does not. This reaches Methods, Limitations and **D22**.
+* **`--score` exits non-zero when the gate fails** (2, matching the module's "cannot
+  proceed" convention) instead of exiting 0 after logging the failure. A scripted caller
+  previously read a failing critical-error gate as a pass.
 
 A five-condition hard gate on step 3 used to make step 4 mechanically impossible. It
 lived in `notebooks/train_colab.ipynb`, which was **superseded**. Colab wipes `/root` on

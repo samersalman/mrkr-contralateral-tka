@@ -882,13 +882,34 @@ crop_qa:
                 "burned_in_text", "non_knee_content"]
   # Label QA precedes registration and is NOT outcome-unblinding, so it spans all splits.
   audit_splits: ["train", "val", "test"]
-  image_audit_csv: "outputs/tables/image_audit_summary.csv"
+  # ---- 2026-08-12: NONE OF THE THREE PATHS BELOW EXISTS, AND NOTHING MAY READ ONE ----
+  # They are OUTPUT destinations for `python3 -m src.crop_qa`, which is the only writer of
+  # any of them, and they are kept as keys only because src/crop_qa.py resolves all three
+  # at import-time of its report builder and tests/test_crop_qa.py overrides the first.
+  # Deleting a key would break that module, which is out of scope for this change; deleting
+  # the FILES was the change. State of each, and the register entry that decides it:
+  #   image_audit_csv      - never written. The protocol section 23 (i) 400-image review is
+  #                          DECLINED by author decision (deviation D40). Nothing will ever
+  #                          score it, so no agreement, kappa or critical-error rate exists.
+  #   outcome_audit_csv    - written once, REMOVED 2026-08-12 with the workbooks. The
+  #                          section 23 (ii) outcome audit is sampled and unadjudicated,
+  #                          which is the one item keeping deviation D22 open.
+  #   laterality_audit_csv - written once, REMOVED 2026-08-12. The protocol section 7
+  #                          laterality audit is DONE: 196 of 200 development patients,
+  #                          98.0% (95% CI 95.0 to 99.2, Wilson). It was adjudicated on
+  #                          PAPER; the per-patient records are held offline and no summary
+  #                          table is published, so the figure is author-attested rather
+  #                          than recomputable. Do not regenerate a file to "restore" it.
+  # A gate that tests `Path(...).exists()` on any of these will FAIL, and that is correct:
+  # the notebook gate that used to do so (notebooks/train_colab.ipynb section 2) was
+  # superseded and carries no crop-QA precondition. Do not re-add one.
+  image_audit_csv: "outputs/tables/image_audit_summary.csv"     # never written - D40
   # (ii) outcome-record audit: >=200 records reviewed via CPT chronology + post-event images
   outcome_audit_min_records: 200
-  outcome_audit_csv: "outputs/tables/outcome_audit_summary.csv"
+  outcome_audit_csv: "outputs/tables/outcome_audit_summary.csv" # removed 2026-08-12 - D22
   # Laterality audit (protocol section 7): over-samples side_source == "recovered".
   laterality_audit_min_patients: 200
-  laterality_audit_csv: "outputs/tables/laterality_audit_summary.csv"
+  laterality_audit_csv: "outputs/tables/laterality_audit_summary.csv"  # removed - see D22
 
 # ---- Track C: multi-view image + clinical fusion model (Colab) -------------
 model_image:

@@ -13,7 +13,16 @@ Six things must therefore never regress:
      that logs failure and exits 0 is not a gate;
   6. re-drawing the sample over an enlarged frame keeps the rows whose reviewer panel is
      still decidable (`stratified_sample(prefer=...)`), and the opaque patient index is
-     stable, because it is burned into 584 panel PNGs a reviewer is about to read.
+     stable, so a re-draw cannot renumber a patient between two versions of a sample.
+
+The protocol section-23(i) review these facilities were built for was DECLINED on
+2026-08-12 (deviation D40), and the scoring application, the workbooks and the reviewer
+panels were removed with it; the five tests that covered `src/qa_review_app.py` came out
+here in the same change. Everything above is still tested because `src/crop_qa.py` stays
+in the project: `src/interpretability.py` imports `residual_marker_scan` from it, and that
+function produced the residual-marker rate the paper reports as its leakage evidence. Do
+not rebuild the scoring app in order to "complete" a declined review; reversing that
+decision is a new register entry, not a restoration.
 
 Run:  python3 -m pytest tests/test_crop_qa.py -q
 """
@@ -337,100 +346,3 @@ def test_sidecars_from_separate_preprocess_runs_are_unioned(tmp_path):
     # a key present in both runs is kept once
     dup = load_sidecars([tmp_path / "a" / "labels.csv", tmp_path / "a" / "labels.csv"])
     assert len(dup) == len(a)
-
-
-# =============================================================================
-# 7. The reviewer-facing scoring app (src/qa_review_app.py)
-# =============================================================================
-def _app_cfg(tmp_path):
-    from src.crop_qa import IMAGE_AUDIT_WORKBOOK
-    cfg_dict = yaml.safe_load((PROJECT_ROOT / "config" / "feasibility.yaml").read_text())
-    coh = tmp_path / "cohort"
-    coh.mkdir(parents=True, exist_ok=True)
-    cfg_dict["paths"]["cohort_dir"] = str(coh)
-    cfg_dict["paths"]["run_log"] = str(tmp_path / "run.log")
-    cfg_dict["crop_qa"]["image_audit_csv"] = str(tmp_path / "summary.csv")
-    p = tmp_path / "cfg.yaml"
-    p.write_text(yaml.safe_dump(cfg_dict, sort_keys=False))
-    wb = _filled_workbook(12)
-    for c in [c for c in wb.columns if c.endswith(("_r1", "_r2"))]:
-        wb[c] = ""
-    wb["empi_anon"] = [f"9{i:07d}" for i in range(len(wb))]
-    wb["split"] = ["train"] * 8 + ["test"] * 4
-    wb["view"] = "frontal"
-    wb["panel_has_full_film"] = [True] * 8 + [False] * 4
-    wb["notes_r1"] = ""
-    wb["notes_r2"] = ""
-    wb.to_csv(coh / IMAGE_AUDIT_WORKBOOK, index=False)
-    return load_config(p)
-
-
-def test_the_app_writes_one_resumable_file_per_reviewer(tmp_path):
-    from src import qa_review_app as app
-    cfg = _app_cfg(tmp_path)
-    rv = app.ReviewList(cfg, "image", "jdoe")
-    assert rv.progress() == {"n_rows": 12, "n_done": 0, "n_left": 12}
-    rv.save("k0", {f: SCORE_OK for f in rv.field_names}, "looks clean", 8.0)
-    rv.save("k9", {**{f: SCORE_OK for f in rv.field_names}, "laterality": SCORE_NA}, "", 3.0)
-
-    # a second reviewer never touches the first one's file
-    other = app.ReviewList(cfg, "image", "asmith")
-    assert other.progress()["n_done"] == 0
-    assert other.csv_path != rv.csv_path
-
-    # resuming reloads the answers and reopens on the first unanswered row
-    again = app.ReviewList(cfg, "image", "jdoe")
-    assert again.progress()["n_done"] == 2
-    state = app.build_state(again)
-    assert state["start"] == 1                      # k0 done, k1 is the first blank
-    assert state["saved"]["k0"]["laterality"] == SCORE_OK
-    assert state["saved"]["k9"]["laterality"] == SCORE_NA
-    assert state["saved"]["k0"]["__note"] == "looks clean"
-
-
-def test_the_app_refuses_a_verdict_that_is_not_in_the_vocabulary(tmp_path):
-    from src import qa_review_app as app
-    rv = app.ReviewList(_app_cfg(tmp_path), "image", "jdoe")
-    with pytest.raises(ValueError):
-        rv.save("k0", {"laterality": "probably fine"}, "", 1.0)
-    with pytest.raises(KeyError):
-        rv.save("not-a-row", {}, "", 1.0)
-
-
-def test_merge_puts_each_reviewer_in_the_column_the_scorer_reads(tmp_path):
-    from src import qa_review_app as app
-    from src.crop_qa import IMAGE_AUDIT_WORKBOOK
-    cfg = _app_cfg(tmp_path)
-    for rev, verdict in (("jdoe", SCORE_OK), ("asmith", SCORE_ERROR)):
-        rv = app.ReviewList(cfg, "image", rev)
-        for r in rv.rows_meta():
-            rv.save(r["row_key"], {f: verdict for f in rv.field_names}, f"note-{rev}", 1.0)
-    assert app.merge_scores(cfg, "image", ["jdoe", "asmith"],
-                            __import__("logging").getLogger("t")) == 0
-    wb = pd.read_csv(cfg.path(cfg["paths"]["cohort_dir"]) / IMAGE_AUDIT_WORKBOOK, dtype=str)
-    assert (wb["laterality_r1"] == SCORE_OK).all()
-    assert (wb["laterality_r2"] == SCORE_ERROR).all()
-    assert (wb["notes_r1"] == "note-jdoe").all()
-    # and that workbook is now scoreable end to end
-    assert score_image_audit(cfg, cfg.path(cfg["paths"]["cohort_dir"]) / IMAGE_AUDIT_WORKBOOK,
-                             __import__("logging").getLogger("t")) == 2   # 100% disagreement
-
-
-def test_the_page_is_self_contained_and_offline(tmp_path):
-    """No CDN, no font host, no fetch to anywhere but this process."""
-    import re
-    from src import qa_review_app as app
-    html = app.render_page(app.build_state(app.ReviewList(_app_cfg(tmp_path), "image", "jdoe")))
-    assert "__STATE__" not in html
-    assert not re.search(r"https?://(?!127\.0\.0\.1)", html)
-    assert not re.search(r'(src|href)\s*=\s*["\']//', html)
-    for verdict in (SCORE_OK, SCORE_ERROR, SCORE_NA):
-        assert verdict in html
-
-
-def test_reviewer_ids_cannot_escape_the_scores_directory():
-    from src.qa_review_app import safe_reviewer
-    assert safe_reviewer("J. Doe") == "jdoe"
-    assert safe_reviewer("../../etc/passwd") == "etcpasswd"
-    assert safe_reviewer("a_b-C1") == "a_b-c1"
-    assert safe_reviewer("   ") == ""
